@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.bg-img {
+  background-image: url('https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687ee53f0019face69e7/view?project=67d54dea00199fd0947e&mode=admin');
+  background-size: cover;
+  background-position: center;
+}

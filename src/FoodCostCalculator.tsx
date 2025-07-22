@@ -10,6 +10,23 @@ const databases = new Databases(dbclient);
 
 const databaseId = '67d54e3c0008c2ac6a81';
 const customerMenuCollection = '687dc62900071ec92f07';
+const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
+const headerBgImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e557c001416d2d97b/view?project=67d54dea00199fd0947e&mode=admin'
+
+const menuCategories = [
+  { id: 'all', name: 'All Items', icon: Coffee, color: 'amber' },
+  { id: 'tradition', name: 'Tradition', icon: Coffee, color: 'amber' },
+  { id: 'brews', name: 'Brews', icon: Coffee, color: 'amber' },
+  { id: 'signature', name: 'Signature', icon: Star, color: 'amber' },
+  { id: 'iced', name: 'Cold & Iced', icon: Zap, color: 'amber' },
+  { id: 'coffeeless', name: 'Coffeeless', icon: Zap, color: 'amber' },
+  { id: 'breakfast', name: 'Breakfast', icon: Milk, color: 'blue' },
+  { id: 'lunch', name: 'Lunch', icon: Milk, color: 'blue' },
+  { id: 'sandwiches', name: 'Sandwiches', icon: Milk, color: 'blue' },
+  { id: 'pastries', name: 'Pastries', icon: Milk, color: 'orange' },
+  { id: 'cookies', name: 'Cookies', icon: Milk, color: 'orange' },
+  { id: 'cakes', name: 'Cakes', icon: Milk, color: 'orange' },
+]
 
 const CoffeeMenuApp = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -20,7 +37,7 @@ const CoffeeMenuApp = () => {
   React.useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await databases.listDocuments(databaseId, customerMenuCollection);
+        const res = await databases.listDocuments(databaseId, customerMenuCollection,[Query.limit(100), Query.offset(0)]);
         setProducts(res.documents);
       } catch (error) {
         console.error('Failed to fetch products:', error);
@@ -29,19 +46,19 @@ const CoffeeMenuApp = () => {
     fetchProducts();
   }, []);
 
-  const filteredProducts = selectedCategory === 'all' 
-    ? products 
+  const filteredProducts = selectedCategory === 'all'
+    ? products
     : products.filter(product => product.category === selectedCategory);
 
   const ProductCard = ({ product }) => (
-    <div 
+    <div
       className="bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
       onClick={() => setSelectedProduct(product)}
     >
       <div className="relative">
         {product.image && (
-          <img 
-            src={product.image} 
+          <img
+            src={product.image}
             alt={product.name}
             className="w-full h-48 object-cover"
           />
@@ -62,7 +79,7 @@ const CoffeeMenuApp = () => {
       {/* Header */}
       <div className="sticky top-0 bg-white shadow-sm z-10">
         <div className="flex items-center p-4">
-          <button 
+          <button
             onClick={onBack}
             className="mr-3 p-2 rounded-full hover:bg-gray-100 transition-colors"
           >
@@ -75,8 +92,8 @@ const CoffeeMenuApp = () => {
       {/* Product Image */}
       <div className="relative">
         {product.image && (
-          <img 
-            src={product.image} 
+          <img
+            src={product.image}
             alt={product.name}
             className="w-full h-64 object-cover"
           />
@@ -101,13 +118,12 @@ const CoffeeMenuApp = () => {
           <h2 className="text-lg font-bold text-gray-800 mb-3">Allergens</h2>
           <div className="flex flex-wrap gap-2">
             {product.allergens.map((allergen, index) => (
-              <span 
+              <span
                 key={index}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  allergen === 'None' 
-                    ? 'bg-green-100 text-green-800' 
+                className={`px-3 py-1 rounded-full text-sm font-medium ${allergen === 'None'
+                    ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
-                }`}
+                  }`}
               >
                 {allergen}
               </span>
@@ -126,41 +142,25 @@ const CoffeeMenuApp = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-6 shadow-lg">
+      <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-6 shadow-lg bg-img">
         <div className="text-center">
-          <Coffee className="w-12 h-12 mx-auto mb-2" />
-          <h1 className="text-2xl font-bold">Bean & Brew Café</h1>
-          <p className="text-amber-100 mt-1">Crafted with love, served with care</p>
+          <img src={logoImgSrc} alt="Bean & Brew Café" className="w-32 mx-auto mb-2" />
         </div>
       </div>
 
       {/* Category Filter */}
       <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="flex overflow-x-auto p-4 space-x-3">
-          {[
-            { id: 'all', name: 'All Items', icon: Coffee, color: 'amber' },
-            { id: 'tradition', name: 'Tradition', icon: Coffee, color: 'amber' },
-            { id: 'brews', name: 'Brews', icon: Coffee, color: 'amber' },
-            { id: 'signature', name: 'Signature', icon: Star, color: 'amber' },
-            { id: 'iced', name: 'Cold & Iced', icon: Zap, color: 'amber' },
-            { id: 'coffeeless', name: 'Coffeeless', icon: Zap, color: 'amber' },
-            { id: 'breakfast', name: 'Breakfast', icon: Milk, color: 'blue' },
-            { id: 'lunch', name: 'Lunch', icon: Milk, color: 'blue' },
-            { id: 'sandwiches', name: 'Sandwiches', icon: Milk, color: 'blue' },
-            { id: 'pastries', name: 'Pastries', icon: Milk, color: 'orange' },
-            { id: 'cookies', name: 'Cookies', icon: Milk, color: 'orange' },
-            { id: 'cakes', name: 'Cakes', icon: Milk, color: 'orange' },
-          ].map((category) => {
+          {menuCategories.map((category) => {
             const IconComponent = category.icon;
             return (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${
-                  selectedCategory === category.id
+                className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
                     ? 'bg-amber-500 text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 <span className="font-medium">{category.name}</span>
               </button>
@@ -171,7 +171,7 @@ const CoffeeMenuApp = () => {
 
       {/* Products Grid */}
       <div className="p-4">
-        <div className="grid grid-cols-1 gap-4 max-w-md mx-auto">
+        <div className="grid grid-cols-1 gap-2 max-w-md mx-auto">
           {filteredProducts.map((product) => (
             <ProductCard key={product.$id} product={product} />
           ))}
