@@ -220,8 +220,8 @@ const CoffeeMenuApp = () => {
       <div className="bg-white border-t p-6 mt-8">
         <div className="text-center text-gray-600">
           <Coffee className="w-6 h-6 mx-auto mb-2 text-amber-500" />
-          <p className="text-sm">Thank you for choosing Bean & Brew Café</p>
-          <p className="text-xs text-gray-500 mt-1">Fresh coffee, made with passion</p>
+          <p className="text-sm">Thank you for choosing Oltre ☺️</p>
+          <p className="text-xs text-gray-500 mt-1">Beyond coffee, made with passion</p>
         </div>
       </div>
     </div>
