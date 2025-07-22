@@ -28,10 +28,17 @@ const menuCategories = [
   { id: 'cakes', name: 'Cakes', icon: Milk, color: 'orange' },
 ]
 
+const categoryGroups = [
+  { id: 'drinks', name: 'Drinks', categories: ['tradition', 'brews', 'signature', 'iced', 'coffeeless'] },
+  { id: 'food', name: 'Food', categories: ['breakfast', 'lunch', 'sandwiches'] },
+  { id: 'sweets', name: 'Sweets', categories: ['pastries', 'cookies', 'cakes'] }
+];
+
 const CoffeeMenuApp = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [products, setProducts] = useState([]);
+  const categoryRefs = React.useRef({});
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
@@ -135,6 +142,13 @@ const CoffeeMenuApp = () => {
     </div>
   );
 
+  const [activeGroup, setActiveGroup] = useState('drinks');
+
+  const getGroupFromCategory = (categoryId) => {
+    const group = categoryGroups.find(group => group.categories.includes(categoryId));
+    return group ? group.name : '';
+  };
+
   if (selectedProduct) {
     return <ProductDetailPage product={selectedProduct} onBack={() => setSelectedProduct(null)} />;
   }
@@ -149,14 +163,38 @@ const CoffeeMenuApp = () => {
       </div>
 
       {/* Category Filter */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
+      <div className="bg-white sticky top-0 z-10 shadow-sm">
+        <div className="flex overflow-x-auto text-gray-600 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
+          {categoryGroups.map((group) => (
+            <div
+              key={group.id}
+              onClick={() => {
+                const firstCategory = group.categories[0];
+                setSelectedCategory(firstCategory);
+                setActiveGroup(group.name);
+                categoryRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+              }}
+              className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
+                ? 'bg-amber-500 text-white'
+                : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {group.name}
+            </div>
+          ))}
+        </div>
         <div className="flex overflow-x-auto p-4 space-x-3">
           {menuCategories.map((category) => {
             const IconComponent = category.icon;
             return (
               <button
                 key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                ref={el => (categoryRefs.current[category.id] = el)}
+                onClick={() => {
+                  setSelectedCategory(category.id);
+                  setActiveGroup(getGroupFromCategory(category.id));
+                  categoryRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
                     ? 'bg-amber-500 text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
