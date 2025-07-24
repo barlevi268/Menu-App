@@ -183,7 +183,7 @@ const CoffeeMenuApp = () => {
             </div>
           ))}
         </div>
-        <div className="flex overflow-x-auto p-4 space-x-3">
+        <div className="flex overflow-x-auto p-4 space-x-3 scrollbar-hide">
           {menuCategories.map((category) => {
             const IconComponent = category.icon;
             return (
@@ -210,9 +210,20 @@ const CoffeeMenuApp = () => {
       {/* Products Grid */}
       <div className="p-4">
         <div className="grid grid-cols-1 gap-2 max-w-md mx-auto">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.$id} product={product} />
-          ))}
+          {menuCategories
+            .filter(cat => cat.id !== 'all')
+            .map(category => {
+              const categoryProducts = filteredProducts.filter(p => p.category === category.id);
+              if (categoryProducts.length === 0) return null;
+              return (
+                <div key={category.id} ref={el => (categoryRefs.current[category.id] = el)} className="mb-6">
+                  <h2 className="text-lg font-bold text-gray-800 mb-2 px-1">{category.name}</h2>
+                  {categoryProducts.map(product => (
+                    <ProductCard key={product.$id} product={product} />
+                  ))}
+                </div>
+              );
+            })}
         </div>
       </div>
 
