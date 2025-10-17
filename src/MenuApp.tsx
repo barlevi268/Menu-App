@@ -11,7 +11,6 @@ const databases = new Databases(dbclient);
 const databaseId = '67d54e3c0008c2ac6a81';
 const customerMenuCollection = '687dc62900071ec92f07';
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
-const headerBgImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e557c001416d2d97b/view?project=67d54dea00199fd0947e&mode=admin'
 
 const menuCategories = [
   { id: 'all', name: 'All Items' },
@@ -67,7 +66,7 @@ const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean;
   };
 
   return (
-    <div 
+    <div
       className={`fixed inset-0 z-[60] bg-black ${visible ? '' : 'pointer-events-none opacity-0'}`}
       onClick={onClose}
     >
@@ -79,7 +78,7 @@ const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean;
           <X className="w-6 h-6 text-white" />
         </button>
       </div>
-      <div 
+      <div
         className="w-full h-full flex items-center justify-center overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         onTouchStart={handleTouchStart}
@@ -100,7 +99,7 @@ const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean;
   );
 };
 
-const CoffeeMenuApp = () => {
+const MenuApp = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
@@ -168,8 +167,8 @@ const CoffeeMenuApp = () => {
         onClick={onClose}
       />
 
-  {/* sliding panel (full-height with top offset) */}
-  <div className={`fixed left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
+      {/* sliding panel (full-height with top offset) */}
+      <div className={`fixed left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
 
         {/* Product Image */}
         <div className="relative">
@@ -218,6 +217,10 @@ const CoffeeMenuApp = () => {
     return group ? group.name : '';
   };
 
+  const scrollToHeader = () => {
+    window.scrollTo({ top: 133, behavior: 'smooth' });
+  }
+
   // close overlay with Escape
   React.useEffect(() => {
     if (!detailVisible) return;
@@ -232,7 +235,7 @@ const CoffeeMenuApp = () => {
   }, [detailVisible]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {selectedProduct && (
         <ImageViewer
           src={selectedProduct.image}
@@ -258,6 +261,7 @@ const CoffeeMenuApp = () => {
                 setSelectedCategory(firstCategory);
                 setActiveGroup(group.name);
                 categoryRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                scrollToHeader();
               }}
               className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
                 ? 'bg-amber-500 text-white'
@@ -278,6 +282,7 @@ const CoffeeMenuApp = () => {
                   setSelectedCategory(category.id);
                   setActiveGroup(getGroupFromCategory(category.id));
                   categoryRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                  scrollToHeader();
                 }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
                   ? 'bg-amber-500 text-white shadow-md'
@@ -293,7 +298,7 @@ const CoffeeMenuApp = () => {
 
       {/* Products Grid */}
       <div className="p-4">
-        <div className="grid grid-cols-1 gap-2 max-w-md mx-auto">
+        <div className="grid grid-cols-1 gap-2 max-w-md mx-auto min-h-[600px]">
           {menuCategories
             .filter(cat => cat.id !== 'all')
             .map(category => {
@@ -337,4 +342,4 @@ const CoffeeMenuApp = () => {
   );
 };
 
-export default CoffeeMenuApp;
+export default MenuApp;
