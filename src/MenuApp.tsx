@@ -105,12 +105,15 @@ const MenuApp = () => {
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const categoryRefs = React.useRef<Record<string, HTMLElement | null>>({});
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
     const fetchProducts = async () => {
       try {
+        setIsLoading(true);
         const res = await databases.listDocuments(databaseId, customerMenuCollection, [Query.limit(500), Query.offset(0)]);
         setProducts(res.documents);
       } catch (error) {
@@ -119,6 +122,38 @@ const MenuApp = () => {
     };
     fetchProducts();
   }, []);
+
+  // Track image loading
+  React.useEffect(() => {
+    if (products.length === 0) return;
+    
+    const imageUrls = products
+      .map(product => product.image)
+      .filter((url): url is string => Boolean(url));
+
+    if (imageUrls.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    const preloadImage = (url: string) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => {
+          setLoadedImages(prev => new Set([...prev, url]));
+          resolve(url);
+        };
+        img.onerror = () => {
+          resolve(url); // Resolve anyway to not block loading on error
+        };
+      });
+    };
+
+    Promise.all(imageUrls.map(preloadImage)).then(() => {
+      setIsLoading(false);
+    });
+  }, [products]);
 
   const filteredProducts = selectedCategory === 'all'
     ? products
@@ -149,7 +184,9 @@ const MenuApp = () => {
           <img
             src={product.image}
             alt={product.name || 'product image'}
-            className="w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3"
+            className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${
+              loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
+            }`}
           />
         ) : (<div className="w-20 h-24 rounded-md flex-shrink-0 ml-3 overflow-hidden"></div>)}
       </div>
@@ -236,6 +273,15 @@ const MenuApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            {/* <p className="text-gray-600">Loading menu...</p> */}
+          </div>
+        </div>
+      )}
       {selectedProduct && (
         <ImageViewer
           src={selectedProduct.image}
