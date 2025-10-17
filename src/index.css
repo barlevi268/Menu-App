@@ -7,3 +7,14 @@
   background-size: cover;
   background-position: center;
 }
+
+/* Utility: clamp text to 2 lines with ellipsis */
+.truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* Fallback for non-webkit: limit height to approx 2 lines (adjust line-height if needed) */
+  line-height: 1.2rem; /* matches Tailwind text-xs default ~1rem line-height may vary */
+  max-height: 2.4rem; /* 2 * line-height */
+}
