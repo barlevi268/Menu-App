@@ -163,12 +163,12 @@ const MenuApp = () => {
     <div className={`fixed inset-0 z-50 ${visible ? '' : 'pointer-events-none'}`} aria-hidden={!visible}>
       {/* backdrop */}
       <div
-        className={`absolute inset-0 bg-black transition-opacity duration-300 ${visible ? 'opacity-40' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black transition-opacity duration-300 ${visible ? 'opacity-40' : 'opacity-0'} `}
         onClick={onClose}
       />
 
       {/* sliding panel (full-height with top offset) */}
-      <div className={`fixed left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
+      <div className={`fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
 
         {/* Product Image */}
         <div className="relative">
