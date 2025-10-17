@@ -1,10 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
-import FoodCostCalculator from "./FoodCostCalculator";
+import MenuApp from "./MenuApp";
 
 function App() {
-  return <FoodCostCalculator />;
+  return <MenuApp />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

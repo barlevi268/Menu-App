@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Client, Databases, ID, Query } from "appwrite";
-import { ArrowLeft, Coffee, Zap, Milk, Star, X } from 'lucide-react';
+import { Client, Databases, Query } from "appwrite";
+import { Coffee, X } from 'lucide-react';
 
 const dbclient = new Client()
   .setEndpoint('https://fra.cloud.appwrite.io/v1')
