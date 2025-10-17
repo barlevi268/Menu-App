@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Client, Databases, ID, Query } from "appwrite";
-import { ArrowLeft, Coffee, Zap, Milk, Star } from 'lucide-react';
+import { ArrowLeft, Coffee, Zap, Milk, Star, X } from 'lucide-react';
 
 const dbclient = new Client()
   .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -35,10 +35,11 @@ const categoryGroups = [
 ];
 
 const CoffeeMenuApp = () => {
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [products, setProducts] = useState([]);
-  const categoryRefs = React.useRef({});
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [detailVisible, setDetailVisible] = useState<boolean>(false);
+  const [products, setProducts] = useState<any[]>([]);
+  const categoryRefs = React.useRef<Record<string, HTMLElement | null>>({});
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
@@ -55,12 +56,16 @@ const CoffeeMenuApp = () => {
 
   const filteredProducts = selectedCategory === 'all'
     ? products
-    : products.filter(product => product.category === selectedCategory);
+    : products.filter((product: any) => product.category === selectedCategory);
 
-  const ProductCard = ({ product }) => (
+  const ProductCard = ({ product }: { product: any }) => (
     <div
       className="relative bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
-      onClick={() => setSelectedProduct(product)}
+      onClick={() => {
+        setSelectedProduct(product);
+        // show overlay
+        setDetailVisible(true);
+      }}
     >
       <div className="flex items-start p-3">
 
@@ -87,77 +92,73 @@ const CoffeeMenuApp = () => {
     </div>
   );
 
-  const ProductDetailPage = ({ product, onBack }) => (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="sticky top-0 bg-white shadow-sm z-10">
-        <div className="flex items-center p-4">
-          <button
-            onClick={onBack}
-            className="mr-3 p-2 rounded-full hover:bg-gray-100 transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6 text-gray-700" />
-          </button>
-          <h1 className="text-xl font-bold text-gray-800">{product.name}</h1>
-        </div>
-      </div>
+  const ProductDetailPage = ({ product, visible, onClose }: { product: any; visible: boolean; onClose: () => void }) => (
+    // overlay wrapper
+    <div className={`fixed inset-0 z-50 ${visible ? '' : 'pointer-events-none'}`} aria-hidden={!visible}>
+      {/* backdrop */}
+      <div
+        className={`absolute inset-0 bg-black transition-opacity duration-300 ${visible ? 'opacity-40' : 'opacity-0'}`}
+        onClick={onClose}
+      />
 
-      {/* Product Image */}
-      <div className="relative">
-        {product.image && (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-64 object-cover"
-          />
-        )}
-        {/* Price in php Badge */}
-        <div className="absolute bottom-4 right-4 bg-amber-500 text-white px-4 py-2 rounded-full text-xl font-bold shadow-lg">
-          ₱{product.price.toFixed(2)}
-        </div>
-      </div>
+  {/* sliding panel (full-height with top offset) */}
+  <div className={`fixed left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
 
-      {/* Product Info */}
-      <div className="p-6 space-y-6">
-
-        {/* Description */}
-        <div>
-          <h2 className="text-lg font-bold text-gray-800 mb-3">Description</h2>
-          <p className="text-gray-700 leading-relaxed">{product.description}</p>
-        </div>
-
-        {/* Allergens */}
-        {/* <div>
-          <h2 className="text-lg font-bold text-gray-800 mb-3">Allergens</h2>
-          <div className="flex flex-wrap gap-2">
-            {product.allergens.map((allergen, index) => (
-              <span
-                key={index}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${allergen === 'None'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
-                  }`}
-              >
-                {allergen}
-              </span>
-            ))}
+        {/* Product Image */}
+        <div className="relative">
+          {product.image && (
+            <img
+              src={product.image}
+              alt={product.name}
+              className="w-full h-72 object-cover rounded-t-2xl"
+            />
+          )}
+          <div className="absolute top-4 right-4 ">
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
+            >
+              <X className="w-6 h-6 text-gray-700" />
+            </button>
           </div>
-        </div> */}
+        </div>
 
+        {/* Product Info */}
+        <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
+          {/* Description */}
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">{product.name}</h1>
+            <div className="text-amber-500 mb-4">
+              ₱{((product.price ?? product.pricePerUnit) ?? 0).toFixed(2)}
+            </div>
+            <p className="text-gray-700 leading-relaxed">{product.description}</p>
+          </div>
+
+        </div>
       </div>
     </div>
   );
 
   const [activeGroup, setActiveGroup] = useState('drinks');
 
-  const getGroupFromCategory = (categoryId) => {
+  const getGroupFromCategory = (categoryId: string) => {
     const group = categoryGroups.find(group => group.categories.includes(categoryId));
     return group ? group.name : '';
   };
 
-  if (selectedProduct) {
-    return <ProductDetailPage product={selectedProduct} onBack={() => setSelectedProduct(null)} />;
-  }
+  // close overlay with Escape
+  React.useEffect(() => {
+    if (!detailVisible) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDetailVisible(false);
+        setSelectedProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [detailVisible]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -191,7 +192,6 @@ const CoffeeMenuApp = () => {
         </div>
         <div className="flex overflow-x-auto p-4 space-x-3 scrollbar-hide">
           {menuCategories.map((category) => {
-            const IconComponent = category.icon;
             return (
               <button
                 key={category.id}
@@ -232,6 +232,20 @@ const CoffeeMenuApp = () => {
             })}
         </div>
       </div>
+
+      {/* Product Detail Overlay */}
+      {selectedProduct && (
+        <ProductDetailPage
+          product={selectedProduct}
+          visible={detailVisible}
+          onClose={() => {
+            // start hide animation
+            setDetailVisible(false);
+            // clear product after animation completes
+            setTimeout(() => setSelectedProduct(null), 300);
+          }}
+        />
+      )}
 
       {/* Footer */}
       <div className="bg-white border-t p-6 mt-8">
