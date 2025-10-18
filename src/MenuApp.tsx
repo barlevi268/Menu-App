@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Client, Databases, Query } from "appwrite";
 import { Coffee, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const dbclient = new Client()
   .setEndpoint('https://fra.cloud.appwrite.io/v1')
@@ -196,55 +197,69 @@ const MenuApp = () => {
   );
 
   const ProductDetailPage = ({ product, visible, onClose }: { product: any; visible: boolean; onClose: () => void }) => (
-    // overlay wrapper
-    <div className={`fixed inset-0 z-50 ${visible ? '' : 'pointer-events-none'}`} aria-hidden={!visible}>
-      {/* backdrop */}
-      <div
-        className={`absolute inset-0 bg-black transition-opacity duration-300 ${visible ? 'opacity-40' : 'opacity-0'} `}
-        onClick={onClose}
-      />
+    <AnimatePresence>
+      {visible && (
+        // overlay wrapper
+        <div className="fixed inset-0 z-50" aria-hidden={!visible}>
+          {/* backdrop */}
+          <motion.div
+            className="absolute inset-0 bg-black"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.4 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.50 }}
+            onClick={onClose}
+          />
 
-      {/* sliding panel (full-height with top offset) */}
-      <div className={`fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl transform transition-transform duration-300 overflow-auto ${visible ? 'translate-y-0' : 'translate-y-full'}`} role="dialog" aria-modal="true">
-
-        {/* Product Image */}
-        <div className="relative">
-          {product.image && (
-            <img
-              src={product.image}
-              alt={product.name}
-              className="w-full h-72 object-cover rounded-t-2xl cursor-zoom-in"
-              onClick={(e) => {
-                e.stopPropagation();
-                setImageViewerVisible(true);
-              }}
-            />
-          )}
-          <div className="absolute top-4 right-4 ">
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
-            >
-              <X className="w-6 h-6 text-gray-700" />
-            </button>
-          </div>
-        </div>
-
-        {/* Product Info */}
-        <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
-          {/* Description */}
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">{product.name}</h1>
-            <div className="text-amber-500 mb-4">
-              ₱{((product.price ?? product.pricePerUnit) ?? 0).toFixed(2)}
+          {/* sliding panel (full-height with top offset) */}
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl overflow-auto"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', stiffness: 200, damping: 32 }}
+          >
+            {/* Product Image */}
+            <div className="relative">
+              {product.image && (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-full h-72 object-cover rounded-t-2xl cursor-zoom-in"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImageViewerVisible(true);
+                  }}
+                />
+              )}
+              <div className="absolute top-4 right-4 ">
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
+                >
+                  <X className="w-6 h-6 text-gray-700" />
+                </button>
+              </div>
             </div>
-            <p className="text-gray-700 leading-relaxed">{product.description}</p>
-          </div>
 
+            {/* Product Info */}
+            <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
+              {/* Description */}
+              <div>
+                <h1 className="text-xl font-bold text-gray-800">{product.name}</h1>
+                <div className="text-amber-500 mb-4">
+                  ₱{((product.price ?? product.pricePerUnit) ?? 0).toFixed(2)}
+                </div>
+                <p className="text-gray-700 leading-relaxed">{product.description}</p>
+              </div>
+            </div>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 
   const [activeGroup, setActiveGroup] = useState('drinks');
