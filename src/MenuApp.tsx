@@ -127,7 +127,7 @@ const MenuApp = () => {
   // Track image loading
   React.useEffect(() => {
     if (products.length === 0) return;
-    
+
     const imageUrls = products
       .map(product => product.image)
       .filter((url): url is string => Boolean(url));
@@ -160,6 +160,11 @@ const MenuApp = () => {
     ? products
     : products.filter((product: any) => product.category === selectedCategory);
 
+  const closeDetailOverlay = () => {
+    setDetailVisible(false);
+    setSelectedProduct(null);
+  }
+
   const ProductCard = ({ product }: { product: any }) => (
     <div
       className="relative bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
@@ -185,81 +190,14 @@ const MenuApp = () => {
           <img
             src={product.image}
             alt={product.name || 'product image'}
-            className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${
-              loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
-            }`}
+            className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
+              }`}
           />
         ) : (<div className="w-20 h-24 rounded-md flex-shrink-0 ml-3 overflow-hidden"></div>)}
       </div>
 
 
     </div>
-  );
-
-  const ProductDetailPage = ({ product, visible, onClose }: { product: any; visible: boolean; onClose: () => void }) => (
-    <AnimatePresence>
-      {visible && (
-        // overlay wrapper
-        <div className="fixed inset-0 z-50" aria-hidden={!visible}>
-          {/* backdrop */}
-          <motion.div
-            className="absolute inset-0 bg-black"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.4 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.50 }}
-            onClick={onClose}
-          />
-
-          {/* sliding panel (full-height with top offset) */}
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl overflow-auto"
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 200, damping: 32 }}
-          >
-            {/* Product Image */}
-            <div className="relative">
-              {product.image && (
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-72 object-cover rounded-t-2xl cursor-zoom-in"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setImageViewerVisible(true);
-                  }}
-                />
-              )}
-              <div className="absolute top-4 right-4 ">
-                <button
-                  onClick={onClose}
-                  aria-label="Close"
-                  className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
-                >
-                  <X className="w-6 h-6 text-gray-700" />
-                </button>
-              </div>
-            </div>
-
-            {/* Product Info */}
-            <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
-              {/* Description */}
-              <div>
-                <h1 className="text-xl font-bold text-gray-800">{product.name}</h1>
-                <div className="text-amber-500 mb-4">
-                  ₱{((product.price ?? product.pricePerUnit) ?? 0).toFixed(2)}
-                </div>
-                <p className="text-gray-700 leading-relaxed">{product.description}</p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
   );
 
   const [activeGroup, setActiveGroup] = useState('drinks');
@@ -378,18 +316,69 @@ const MenuApp = () => {
       </div>
 
       {/* Product Detail Overlay */}
-      {selectedProduct && (
-        <ProductDetailPage
-          product={selectedProduct}
-          visible={detailVisible}
-          onClose={() => {
-            // start hide animation
-            setDetailVisible(false);
-            // clear product after animation completes
-            setTimeout(() => setSelectedProduct(null), 300);
-          }}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {detailVisible && (
+          // overlay wrapper
+          <div className="fixed inset-0 z-50" aria-hidden={!detailVisible}>
+            {/* backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.30 }}
+              onClick={closeDetailOverlay}
+            />
+
+            {/* sliding panel (full-height with top offset) */}
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl overflow-auto"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 180, damping: 25 }}
+            >
+              {/* Product Image */}
+              <div className="relative">
+                {selectedProduct.image && (
+                  <img
+                    src={selectedProduct.image}
+                    alt={selectedProduct.name}
+                    className="w-full h-72 object-cover rounded-t-2xl cursor-zoom-in"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImageViewerVisible(true);
+                    }}
+                  />
+                )}
+                <div className="absolute top-4 right-4 ">
+                  <button
+                    onClick={closeDetailOverlay}
+                    aria-label="Close"
+                    className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
+                  >
+                    <X className="w-6 h-6 text-gray-700" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Product Info */}
+              <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
+                {/* Description */}
+                <div>
+                  <h1 className="text-xl font-bold text-gray-800">{selectedProduct.name}</h1>
+                  <div className="text-amber-500 mb-4">
+                    ₱{((selectedProduct.price ?? selectedProduct.pricePerUnit) ?? 0).toFixed(2)}
+                  </div>
+                  <p className="text-gray-700 leading-relaxed">{selectedProduct.description}</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <div className="bg-white border-t p-6 mt-8">
