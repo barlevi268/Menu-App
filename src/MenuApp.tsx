@@ -108,7 +108,21 @@ const MenuApp = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
-  const categoryRefs = React.useRef<Record<string, HTMLElement | null>>({});
+  const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
+  const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
+  const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
+
+  const STICKY_OFFSET = 130; // height of sticky selector
+  const scrollToCategoryHeader = (id: string) => {
+    if (id === 'all') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const el = categoryHeaderRefs.current[id];
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + window.scrollY - STICKY_OFFSET;
+    window.scrollTo({ top: y, behavior: 'smooth' });
+  };
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
@@ -207,9 +221,6 @@ const MenuApp = () => {
     return group ? group.name : '';
   };
 
-  const scrollToHeader = () => {
-    window.scrollTo({ top: 133, behavior: 'smooth' });
-  }
 
   // close overlay with Escape
   React.useEffect(() => {
@@ -231,7 +242,6 @@ const MenuApp = () => {
         <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            {/* <p className="text-gray-600">Loading menu...</p> */}
           </div>
         </div>
       )}
@@ -259,8 +269,8 @@ const MenuApp = () => {
                 const firstCategory = group.categories[0];
                 setSelectedCategory(firstCategory);
                 setActiveGroup(group.name);
-                categoryRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                scrollToHeader();
+                categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                scrollToCategoryHeader(firstCategory);
               }}
               className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
                 ? 'bg-amber-500 text-white'
@@ -276,12 +286,12 @@ const MenuApp = () => {
             return (
               <button
                 key={category.id}
-                ref={el => (categoryRefs.current[category.id] = el)}
+                ref={el => (categoryButtonRefs.current[category.id] = el)}
                 onClick={() => {
                   setSelectedCategory(category.id);
                   setActiveGroup(getGroupFromCategory(category.id));
-                  categoryRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                  scrollToHeader();
+                  categoryButtonRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                  scrollToCategoryHeader(category.id);
                 }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
                   ? 'bg-amber-500 text-white shadow-md'
@@ -301,11 +311,16 @@ const MenuApp = () => {
           {menuCategories
             .filter(cat => cat.id !== 'all')
             .map(category => {
-              const categoryProducts = filteredProducts.filter(p => p.category === category.id);
+              const categoryProducts = products.filter(p => p.category === category.id);
               if (categoryProducts.length === 0) return null;
               return (
-                <div key={category.id} ref={el => (categoryRefs.current[category.id] = el)} className="mb-6">
-                  <h2 className="text-lg font-bold text-gray-800 mb-2 px-1">{category.name}</h2>
+                <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mb-6">
+                  <h2
+                    ref={el => (categoryHeaderRefs.current[category.id] = el)}
+                    className="text-lg font-bold text-gray-800 mb-2 px-1"
+                  >
+                    {category.name}
+                  </h2>
                   {categoryProducts.map(product => (
                     <ProductCard key={product.$id} product={product} />
                   ))}
