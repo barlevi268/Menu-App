@@ -111,6 +111,12 @@ const MenuApp = () => {
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
+  // Track programmatic scroll and ordered categories
+  const isAutoScrollingRef = React.useRef(false);
+  const orderedCategoryIds = React.useMemo(
+    () => menuCategories.filter(c => c.id !== 'all').map(c => c.id),
+    []
+  );
 
   const STICKY_OFFSET = 130; // height of sticky selector
   const scrollToCategoryHeader = (id: string) => {
@@ -121,8 +127,57 @@ const MenuApp = () => {
     const el = categoryHeaderRefs.current[id];
     if (!el) return;
     const y = el.getBoundingClientRect().top + window.scrollY - STICKY_OFFSET;
+    isAutoScrollingRef.current = true;
     window.scrollTo({ top: y, behavior: 'smooth' });
+    window.setTimeout(() => { isAutoScrollingRef.current = false; }, 600);
   };
+
+  // Scroll observer: update selectedCategory based on scroll position
+  React.useEffect(() => {
+    let ticking = false;
+    const handle = () => {
+      if (isAutoScrollingRef.current) return;
+      const offset = STICKY_OFFSET + 8; // small extra spacing
+      let candidateAbove: { id: string; dist: number } | null = null;
+      let candidateBelow: { id: string; dist: number } | null = null;
+
+      for (const id of orderedCategoryIds) {
+        const el = categoryHeaderRefs.current[id];
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top - offset;
+        if (top <= 0) {
+          const d = Math.abs(top);
+          if (!candidateAbove || d < candidateAbove.dist) candidateAbove = { id, dist: d };
+        } else {
+          if (!candidateBelow || top < candidateBelow.dist) candidateBelow = { id, dist: top };
+        }
+      }
+
+      const nextId = (candidateAbove?.id ?? candidateBelow?.id) || null;
+      if (nextId && nextId !== selectedCategory) {
+        setSelectedCategory(nextId);
+        setActiveGroup(getGroupFromCategory(nextId));
+      }
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        window.requestAnimationFrame(handle);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    // run once on mount to set initial category in view
+    onScroll();
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [STICKY_OFFSET, orderedCategoryIds, selectedCategory]);
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
@@ -268,7 +323,7 @@ const MenuApp = () => {
               onClick={() => {
                 const firstCategory = group.categories[0];
                 setSelectedCategory(firstCategory);
-                setActiveGroup(group.name);
+                // active group will update on scroll
                 categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                 scrollToCategoryHeader(firstCategory);
               }}
@@ -289,7 +344,7 @@ const MenuApp = () => {
                 ref={el => (categoryButtonRefs.current[category.id] = el)}
                 onClick={() => {
                   setSelectedCategory(category.id);
-                  setActiveGroup(getGroupFromCategory(category.id));
+                  // active group will update on scroll
                   categoryButtonRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                   scrollToCategoryHeader(category.id);
                 }}
