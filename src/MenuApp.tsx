@@ -14,7 +14,7 @@ const customerMenuCollection = '687dc62900071ec92f07';
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
 
 const menuCategories = [
-  { id: 'all', name: 'All Items' },
+  // { id: 'all', name: 'All Items' },
   { id: 'tradition', name: 'Tradition' },
   { id: 'brews', name: 'Brews' },
   { id: 'signature', name: 'Signature' },
@@ -178,6 +178,14 @@ const MenuApp = () => {
       window.removeEventListener('resize', onScroll);
     };
   }, [STICKY_OFFSET, orderedCategoryIds, selectedCategory]);
+
+  // Auto-center the active category chip when selection changes
+  React.useEffect(() => {
+    const btn = categoryButtonRefs.current[selectedCategory];
+    if (btn && typeof btn.scrollIntoView === 'function') {
+      btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [selectedCategory]);
 
   // Fetch products from Appwrite DB
   React.useEffect(() => {
