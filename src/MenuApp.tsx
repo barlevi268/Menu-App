@@ -14,14 +14,13 @@ const customerMenuCollection = '687dc62900071ec92f07';
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
 
 const menuCategories = [
-  // { id: 'all', name: 'All Items' },
   { id: 'tradition', name: 'Tradition' },
   { id: 'brews', name: 'Brews' },
   { id: 'signature', name: 'Signature' },
   { id: 'iced', name: 'Cold & Iced' },
   { id: 'coffeeless', name: 'Coffeeless' },
   { id: 'breakfast', name: 'Breakfast' },
-  { id: 'lunch', name: 'Lunch' },
+  { id: 'mains', name: 'Mains' },
   { id: 'sandwiches', name: 'Sandwiches' },
   { id: 'pastries', name: 'Pastries' },
   { id: 'cookies', name: 'Cookies' },
@@ -404,7 +403,7 @@ const MenuApp = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.4 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.30 }}
+              transition={{ duration: 0.20 }}
               onClick={closeDetailOverlay}
             />
 
@@ -414,9 +413,9 @@ const MenuApp = () => {
               aria-modal="true"
               className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl overflow-auto"
               initial={{ y: '100%', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
+              animate={{ y: selectedProduct.image ? 0 : 288, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 180, damping: 25 }}
+              transition={{ type: 'spring', stiffness: 240, damping: 25 }}
             >
               {/* Product Image */}
               <div className="relative">
