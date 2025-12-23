@@ -303,7 +303,7 @@ const MenuApp = () => {
           setIsLoading(false);
           return;
         }
-        const baseUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:3000';
+        const baseUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'https://api.orda.co';
         const path = companyId
           ? `${baseUrl}/public/customer-menu/${companyId}`
           : `${baseUrl}/public/customer-menu`;
