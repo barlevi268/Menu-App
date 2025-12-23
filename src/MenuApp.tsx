@@ -1,37 +1,20 @@
 import React, { useState } from 'react';
-import { Client, Databases, Query } from "appwrite";
 import { Coffee, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { themeClasses } from './themeClasses';
 
-const dbclient = new Client()
-  .setEndpoint('https://fra.cloud.appwrite.io/v1')
-  .setProject('67d54dea00199fd0947e');
-
-const databases = new Databases(dbclient);
-
-const databaseId = '67d54e3c0008c2ac6a81';
-const customerMenuCollection = '687dc62900071ec92f07';
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
 
-const menuCategories = [
-  { id: 'tradition', name: 'Tradition' },
-  { id: 'brews', name: 'Brews' },
-  { id: 'signature', name: 'Signature' },
-  { id: 'iced', name: 'Cold & Iced' },
-  { id: 'coffeeless', name: 'Coffeeless' },
-  { id: 'breakfast', name: 'Breakfast' },
-  { id: 'mains', name: 'Mains' },
-  { id: 'sandwiches', name: 'Sandwiches' },
-  { id: 'pastries', name: 'Pastries' },
-  { id: 'cookies', name: 'Cookies' },
-  { id: 'cakes', name: 'Cakes' },
-]
-
-const categoryGroups = [
-  { id: 'drinks', name: 'Drinks', categories: ['tradition', 'brews', 'signature', 'iced', 'coffeeless'] },
-  { id: 'food', name: 'Food', categories: ['breakfast', 'lunch', 'sandwiches'] },
-  { id: 'sweets', name: 'Sweets', categories: ['pastries', 'cookies', 'cakes'] }
-];
+type MenuCategory = { id: string; name: string };
+type CategoryGroup = { id: string; name: string; categories: string[] };
+type MenuPreferences = {
+  menuTypes?: Record<string, { name?: string; categorieArrangment?: Record<string, number | string> }>;
+  categories?: Record<string, { id: number | string; label?: string }>;
+  themeColor?: string;
+  coverPhotoUrl?: string | null;
+  logoUrl?: string | null;
+  footerText?: string | null;
+};
 
 const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean; onClose: () => void }) => {
   const [scale, setScale] = useState(1);
@@ -106,6 +89,13 @@ const MenuApp = () => {
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [menuError, setMenuError] = useState(false);
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
+  const [themeColor, setThemeColor] = useState('amber');
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [footerText, setFooterText] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
@@ -114,7 +104,7 @@ const MenuApp = () => {
   const isAutoScrollingRef = React.useRef(false);
   const orderedCategoryIds = React.useMemo(
     () => menuCategories.filter(c => c.id !== 'all').map(c => c.id),
-    []
+    [menuCategories]
   );
 
   const STICKY_OFFSET = 130; // height of sticky selector
@@ -186,15 +176,171 @@ const MenuApp = () => {
     }
   }, [selectedCategory]);
 
-  // Fetch products from Appwrite DB
+  const getCompanyIdFromPath = () => {
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    return segments[0];
+  };
+
+  const normalizeValue = (value: unknown, fallback: string) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || fallback;
+    }
+    if (value === null || value === undefined) return fallback;
+    return String(value).trim() || fallback;
+  };
+
+  const formatLabel = (value: string) => {
+    return value
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const sortNumericKeys = (obj?: Record<string, unknown>) =>
+    Object.keys(obj ?? {}).sort((a, b) => Number(a) - Number(b));
+
+  const getPreferences = (data: any): MenuPreferences | null => {
+    return data?.prefrerences ?? data?.preferences ?? null;
+  };
+
+  const buildMenuMeta = (items: any[], preferences?: MenuPreferences | null) => {
+    const categoryMap = new Map<string, string>();
+    const groupMap = new Map<string, Set<string>>();
+    const itemCategories = new Set<string>();
+
+    items.forEach((item) => {
+      const categoryKey = normalizeValue(item.category, 'uncategorized');
+      const groupKey = normalizeValue(item.menuType, 'menu');
+      itemCategories.add(categoryKey);
+      if (!categoryMap.has(categoryKey)) {
+        categoryMap.set(categoryKey, formatLabel(categoryKey));
+      }
+      if (!groupMap.has(groupKey)) groupMap.set(groupKey, new Set());
+      groupMap.get(groupKey)?.add(categoryKey);
+    });
+
+    const prefCategories = preferences?.categories ?? {};
+    const prefMenuTypes = preferences?.menuTypes ?? {};
+    const hasPrefOrder = Object.keys(prefMenuTypes).length > 0 && Object.keys(prefCategories).length > 0;
+
+    if (hasPrefOrder) {
+      const categoryIdToLabel = new Map<string, string>();
+      Object.values(prefCategories).forEach((cat) => {
+        const id = normalizeValue(cat?.id, '');
+        const label = normalizeValue(cat?.label, id || 'uncategorized');
+        if (id) categoryIdToLabel.set(id, label);
+      });
+
+      const orderedCategoryLabels: string[] = [];
+      const orderedGroups: CategoryGroup[] = [];
+
+      sortNumericKeys(prefMenuTypes).forEach((menuTypeKey) => {
+        const menuType = prefMenuTypes[menuTypeKey];
+        const arrangement = menuType?.categorieArrangment ?? {};
+        const groupCategories: string[] = [];
+        sortNumericKeys(arrangement).forEach((arrKey) => {
+          const categoryId = normalizeValue(arrangement[arrKey], '');
+          const label = categoryIdToLabel.get(categoryId);
+          if (label && itemCategories.has(label)) {
+            groupCategories.push(label);
+            if (!orderedCategoryLabels.includes(label)) orderedCategoryLabels.push(label);
+          }
+        });
+
+        if (groupCategories.length > 0) {
+          orderedGroups.push({
+            id: menuTypeKey,
+            name: formatLabel(normalizeValue(menuType?.name, 'menu')),
+            categories: groupCategories,
+          });
+        }
+      });
+
+      const remainingCategories = Array.from(categoryMap.keys()).filter(
+        (categoryId) => !orderedCategoryLabels.includes(categoryId)
+      );
+      remainingCategories.forEach((categoryId) => orderedCategoryLabels.push(categoryId));
+
+      const categories = orderedCategoryLabels.map((id) => ({
+        id,
+        name: categoryMap.get(id) ?? formatLabel(id),
+      }));
+
+      return { categories, groups: orderedGroups };
+    }
+
+    const categories = Array.from(categoryMap, ([id, name]) => ({ id, name }));
+    const groups = Array.from(groupMap, ([id, categorySet]) => ({
+      id,
+      name: formatLabel(id),
+      categories: Array.from(categorySet),
+    }));
+
+    return { categories, groups };
+  };
+
+  // Fetch products from API endpoint
   React.useEffect(() => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
-        const res = await databases.listDocuments(databaseId, customerMenuCollection, [Query.limit(500), Query.offset(0)]);
-        setProducts(res.documents);
+        setMenuError(false);
+        const companyId = getCompanyIdFromPath();
+        if (!companyId) {
+          setMenuError(true);
+          setProducts([]);
+          setMenuCategories([]);
+          setCategoryGroups([]);
+          setIsLoading(false);
+          return;
+        }
+        const baseUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:3000';
+        const path = companyId
+          ? `${baseUrl}/public/customer-menu/${companyId}`
+          : `${baseUrl}/public/customer-menu`;
+        const res = await fetch(path, { headers: { Accept: 'application/json' } });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch products: ${res.status}`);
+        }
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const bodyText = await res.text();
+          throw new Error(`Expected JSON but received: ${bodyText.slice(0, 120)}...`);
+        }
+        const data = await res.json();
+        const preferences = getPreferences(data);
+        const rawItems = Array.isArray(data)
+          ? data
+          : (data?.items ?? data?.documents ?? data?.data ?? []);
+        const items = rawItems.map((item: any) => ({
+          ...item,
+          category: normalizeValue(item.category, 'uncategorized'),
+          menuType: normalizeValue(item.menuType, 'menu'),
+        }));
+        setProducts(items);
+        const { categories, groups } = buildMenuMeta(items, preferences);
+        setMenuCategories(categories);
+        setCategoryGroups(groups);
+        if (preferences?.themeColor) {
+          setThemeColor(normalizeValue(preferences.themeColor, 'amber'));
+        }
+        if (preferences?.coverPhotoUrl !== undefined) {
+          setCoverPhotoUrl(preferences.coverPhotoUrl ?? null);
+        }
+        if (preferences?.logoUrl !== undefined) {
+          setLogoUrl(preferences.logoUrl ?? null);
+        }
+        if (preferences?.footerText !== undefined) {
+          setFooterText(preferences.footerText ?? null);
+        }
       } catch (error) {
         console.error('Failed to fetch products:', error);
+        setMenuError(true);
+        setProducts([]);
+        setMenuCategories([]);
+        setCategoryGroups([]);
       }
     };
     fetchProducts();
@@ -276,12 +422,15 @@ const MenuApp = () => {
     </div>
   );
 
-  const [activeGroup, setActiveGroup] = useState('drinks');
+  const [activeGroup, setActiveGroup] = useState('');
 
   const getGroupFromCategory = (categoryId: string) => {
     const group = categoryGroups.find(group => group.categories.includes(categoryId));
     return group ? group.name : '';
   };
+
+
+  const activeTheme = themeClasses[themeColor as keyof typeof themeClasses] ?? themeClasses.amber;
 
 
   // close overlay with Escape
@@ -303,7 +452,7 @@ const MenuApp = () => {
       {isLoading && (
         <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
           <div className="text-center">
-            <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <div className={`w-16 h-16 border-4 ${activeTheme.border} border-t-transparent rounded-full animate-spin mb-4`}></div>
           </div>
         </div>
       )}
@@ -315,9 +464,13 @@ const MenuApp = () => {
         />
       )}
       {/* Header */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-6 shadow-lg bg-img">
-        <div className="text-center">
-          <img src={logoImgSrc} alt="Bean & Brew Café" className="w-32 mx-auto mb-2" />
+      <div
+        className={`relative text-white p-6 shadow-lg bg-img ${coverPhotoUrl ? '' : `bg-gradient-to-r ${activeTheme.header}`}`}
+        style={coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
+        {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-70`} />}
+        <div className="relative z-10 text-center">
+          <img src={logoUrl || logoImgSrc} alt="Brand logo" className="w-32 mx-auto mb-2" />
         </div>
       </div>
 
@@ -335,7 +488,7 @@ const MenuApp = () => {
                 scrollToCategoryHeader(firstCategory);
               }}
               className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
-                ? 'bg-amber-500 text-white'
+                ? activeTheme.groupActive
                 : 'text-gray-600 hover:bg-gray-200'
                 }`}
             >
@@ -356,7 +509,7 @@ const MenuApp = () => {
                   scrollToCategoryHeader(category.id);
                 }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
-                  ? 'bg-amber-500 text-white shadow-md'
+                  ? activeTheme.chipActive
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
@@ -370,6 +523,11 @@ const MenuApp = () => {
       {/* Products Grid */}
       <div className="p-4">
         <div className="grid grid-cols-1 gap-2 max-w-md mx-auto min-h-[600px]">
+          {menuError && !isLoading && (
+            <div className="text-center text-gray-600 font-semibold py-12">
+              Menu not Found
+            </div>
+          )}
           {menuCategories
             .filter(cat => cat.id !== 'all')
             .map(category => {
@@ -446,7 +604,7 @@ const MenuApp = () => {
                 {/* Description */}
                 <div>
                   <h1 className="text-xl font-bold text-gray-800">{selectedProduct.name}</h1>
-                  <div className="text-amber-500 mb-4">
+                  <div className={`${activeTheme.accentText} mb-4`}>
                     ₱{((selectedProduct.price ?? selectedProduct.pricePerUnit) ?? 0).toFixed(2)}
                   </div>
                   <p className="text-gray-700 leading-relaxed">{selectedProduct.description}</p>
@@ -460,9 +618,9 @@ const MenuApp = () => {
       {/* Footer */}
       <div className="bg-white border-t p-6 mt-8">
         <div className="text-center text-gray-600">
-          <Coffee className="w-6 h-6 mx-auto mb-2 text-amber-500" />
-          <p className="text-sm">Thank you for choosing Oltre ☺️</p>
-          <p className="text-xs text-gray-500 mt-1">Beyond coffee, made with passion</p>
+          <Coffee className={`w-6 h-6 mx-auto mb-2 ${activeTheme.accentText}`} />
+          <p className="text-sm">{footerText || 'Thank you for choosing Oltre ☺️'}</p>
+          {!footerText && <p className="text-xs text-gray-500 mt-1">Beyond coffee, made with passion</p>}
         </div>
       </div>
     </div>
