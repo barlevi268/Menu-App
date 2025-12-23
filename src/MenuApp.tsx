@@ -177,6 +177,13 @@ const MenuApp = () => {
   }, [selectedCategory]);
 
   const getCompanyIdFromPath = () => {
+    const params = new URLSearchParams(window.location.search);
+    const paramId =
+      params.get('companyId') ||
+      params.get('companyID') ||
+      params.get('id') ||
+      params.get('cid');
+    if (paramId) return paramId;
     const segments = window.location.pathname.split('/').filter(Boolean);
     return segments[0];
   };
@@ -465,18 +472,18 @@ const MenuApp = () => {
       )}
       {/* Header */}
       <div
-        className={`relative text-white p-6 shadow-lg bg-img ${coverPhotoUrl ? '' : `bg-gradient-to-r ${activeTheme.header}`}`}
+        className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : `bg-gradient-to-r ${activeTheme.header}`}`}
         style={coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
       >
-        {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-70`} />}
+        {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-30`} />}
         <div className="relative z-10 text-center">
           <img src={logoUrl || logoImgSrc} alt="Brand logo" className="w-32 mx-auto mb-2" />
         </div>
       </div>
 
       {/* Category Filter */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="flex overflow-x-auto text-gray-600 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
+      <div className="bg-white sticky top-0 z-10 shadow-sm ">
+        <div className="flex max-w-4xl mx-auto overflow-x-auto text-gray-600 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
           {categoryGroups.map((group) => (
             <div
               key={group.id}
@@ -496,7 +503,7 @@ const MenuApp = () => {
             </div>
           ))}
         </div>
-        <div className="flex overflow-x-auto p-4 space-x-3 scrollbar-hide">
+        <div className="flex max-w-4xl mx-auto overflow-x-auto p-4 space-x-3 scrollbar-hide">
           {menuCategories.map((category) => {
             return (
               <button
@@ -521,8 +528,8 @@ const MenuApp = () => {
       </div>
 
       {/* Products Grid */}
-      <div className="p-4">
-        <div className="grid grid-cols-1 gap-2 max-w-md mx-auto min-h-[600px]">
+      <div className="p-4 md:px-8 flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-8 mx-auto min-h-[600px]">
           {menuError && !isLoading && (
             <div className="text-center text-gray-600 font-semibold py-12">
               Menu not Found
@@ -618,7 +625,6 @@ const MenuApp = () => {
       {/* Footer */}
       <div className="bg-white border-t p-6 mt-8">
         <div className="text-center text-gray-600">
-          <Coffee className={`w-6 h-6 mx-auto mb-2 ${activeTheme.accentText}`} />
           <p className="text-sm">{footerText || 'Thank you for choosing Oltre ☺️'}</p>
           {!footerText && <p className="text-xs text-gray-500 mt-1">Beyond coffee, made with passion</p>}
         </div>
