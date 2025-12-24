@@ -15,6 +15,11 @@ type MenuPreferences = {
   logoUrl?: string | null;
   footerText?: string | null;
 };
+type MenuItemRow = {
+  price?: number | string;
+  pricePerUnit?: number | string;
+  options?: Array<{ name?: string; price?: number | string }>;
+};
 
 const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean; onClose: () => void }) => {
   const [scale, setScale] = useState(1);
@@ -203,6 +208,41 @@ const MenuApp = () => {
       .replace(/\s+/g, ' ')
       .trim()
       .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const buildDisplayPrice = (row: MenuItemRow) => {
+    const formatPrice = (price: number) => `₱${new Intl.NumberFormat('en-PH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(price)}`;
+    console.log('buildDisplayPrice row:', row);
+    if (Array.isArray(row.options) && row.options.length > 0) {
+      const prices = row.options
+        .map((opt) =>
+          typeof opt.price === 'number' ? opt.price : parseFloat(String(opt.price || 0))
+        )
+        .filter((price) => !isNaN(price));
+      if (prices.length === 0) {
+        return '₱0.00';
+      }
+      // if there are two options separate with slash instead of dash
+      if (prices.length === 2) {
+        return `${formatPrice(prices[0])} / ${formatPrice(prices[1])}`;
+      }
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      if (minPrice === maxPrice) {
+        return formatPrice(minPrice);
+      }
+      return `${formatPrice(minPrice)} - ${formatPrice(maxPrice)}`;
+    }
+    const priceValue =
+      typeof row.price === 'number'
+        ? row.price
+        : typeof row.pricePerUnit === 'number'
+          ? row.pricePerUnit
+          : parseFloat(String((row.price ?? row.pricePerUnit) || 0));
+    return formatPrice(priceValue);
   };
 
   const sortNumericKeys = (obj?: Record<string, unknown>) =>
@@ -410,7 +450,7 @@ const MenuApp = () => {
             <h3 className="font-bold text-gray-800 truncate">{product.name}</h3>
             <p className="text-gray-600 text-xs truncate-2">{product.description}</p>
             <div className="absolute bottom-3 text-sm font-bold">
-              ₱{((product.price ?? product.pricePerUnit) ?? 0).toFixed(2)}
+              {buildDisplayPrice(product)}
             </div>
           </div>
 
@@ -610,11 +650,25 @@ const MenuApp = () => {
               <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
                 {/* Description */}
                 <div>
-                  <h1 className="text-xl font-bold text-gray-800">{selectedProduct.name}</h1>
-                  <div className={`${activeTheme.accentText} mb-4`}>
-                    ₱{((selectedProduct.price ?? selectedProduct.pricePerUnit) ?? 0).toFixed(2)}
-                  </div>
+                  <h1 className="text-3xl font-bold text-gray-800">{selectedProduct.name}</h1>
                   <p className="text-gray-700 leading-relaxed">{selectedProduct.description}</p>
+                  {Array.isArray(selectedProduct.options) && selectedProduct.options.length > 0 ? (
+                    <div className="mt-4 space-y-1">
+
+                      {selectedProduct.options.map((option: { name?: string; price?: number | string }, index: number) => (
+                        <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 border-b py-3 px-1">
+                          <span className="text-xs mr-2 text-gray-700">●</span>
+                          <span className="font-semibold">{option.name || 'Option'}</span>
+                          <span className="mx-2">-</span>
+                          <span>{buildDisplayPrice({ options: [option] })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={`${activeTheme.accentText} mb-4`}>
+                      {buildDisplayPrice(selectedProduct)}
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
