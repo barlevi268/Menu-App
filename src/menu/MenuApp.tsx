@@ -185,11 +185,13 @@ const MenuApp = () => {
     const params = new URLSearchParams(window.location.search);
     const paramId =
       params.get('companyId') ||
-      params.get('companyID') ||
-      params.get('id') ||
-      params.get('cid');
-    if (paramId) return paramId;
+      params.get('id');
+    
     const segments = window.location.pathname.split('/').filter(Boolean);
+    if (paramId) return paramId;
+    if (segments[0] === 'menu') {
+      return segments[1];
+    }
     return segments[0];
   };
 
@@ -215,7 +217,6 @@ const MenuApp = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(price)}`;
-    console.log('buildDisplayPrice row:', row);
     if (Array.isArray(row.options) && row.options.length > 0) {
       const prices = row.options
         .map((opt) =>
@@ -343,7 +344,7 @@ const MenuApp = () => {
           setIsLoading(false);
           return;
         }
-        const baseUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'https://api.orda.co';
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co';
         const path = companyId
           ? `${baseUrl}/public/customer-menu/${companyId}`
           : `${baseUrl}/public/customer-menu`;
@@ -517,7 +518,7 @@ const MenuApp = () => {
       >
         {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-30`} />}
         <div className="relative z-10 text-center">
-          <img src={logoUrl || logoImgSrc} alt="Brand logo" className="w-32 mx-auto mb-2" />
+          <img src={logoUrl || logoImgSrc} alt="Brand logo" className="max-w-32 mx-auto" />
         </div>
       </div>
 
@@ -569,7 +570,7 @@ const MenuApp = () => {
 
       {/* Products Grid */}
       <div className="p-4 md:px-8 flex-1">
-        <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-8 mx-auto min-h-[600px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]">
           {menuError && !isLoading && (
             <div className="text-center text-gray-600 font-semibold py-12">
               Menu not Found
@@ -584,7 +585,7 @@ const MenuApp = () => {
                 <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mb-6">
                   <h2
                     ref={el => (categoryHeaderRefs.current[category.id] = el)}
-                    className="text-lg font-bold text-gray-800 mb-2 px-1"
+                    className="text-xl font-extrabold text-gray-700 mb-4 px-1 border-b pb-2"
                   >
                     {category.name}
                   </h2>

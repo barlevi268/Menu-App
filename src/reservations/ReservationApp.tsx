@@ -1,0 +1,442 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+
+type StepProps = {
+  n: number;
+  label: string;
+  active: boolean;
+  done: boolean;
+};
+
+type CardProps = {
+  children: React.ReactNode;
+};
+
+type Reservation = {
+  start: string;
+  duration: number;
+};
+
+type Zone = {
+  id: string;
+  name: string;
+  capacity: number;
+};
+
+const Step = ({ n, label, active, done }: StepProps) => (
+  <div className="flex items-center gap-3">
+    <div
+      className={[
+        "w-8 h-8 rounded-full grid place-items-center text-sm font-bold",
+        done
+          ? "bg-green-600 text-white"
+          : active
+          ? "bg-black text-white"
+          : "bg-gray-200 text-gray-600",
+      ].join(" ")}
+    >
+      {done ? "OK" : n}
+    </div>
+    <div className={"text-sm " + (active ? "font-semibold" : "text-gray-500")}>{label}</div>
+  </div>
+);
+
+const Card = ({ children }: CardProps) => (
+  <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border border-gray-100">
+    {children}
+  </div>
+);
+
+const OPEN_TIME = "10:00";
+const CLOSE_TIME = "22:00";
+const SLOT_INTERVAL_MIN = 30;
+const DEFAULT_RES_DURATION_MIN = 90;
+const ZONES: Zone[] = [
+  { id: "main", name: "Main Hall", capacity: 20 },
+  { id: "patio", name: "Patio", capacity: 3 },
+  { id: "bar", name: "Bar Counter", capacity: 12 },
+  { id: "window", name: "Window Seats", capacity: 10 },
+];
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
+const toHHMM = (mins: number) => {
+  const h = Math.floor(mins / 60).toString().padStart(2, "0");
+  const m = (mins % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+};
+function generateSlots(openHHMM: string, closeHHMM: string, intervalMin: number) {
+  const open = toMin(openHHMM);
+  const close = toMin(closeHHMM);
+  const slots = [] as number[];
+  for (let t = open; t + DEFAULT_RES_DURATION_MIN <= close; t += intervalMin) {
+    slots.push(t);
+  }
+  return slots;
+}
+function overlap(aStart: number, aDur: number, bStart: number, bDur: number) {
+  const aEnd = aStart + aDur;
+  const bEnd = bStart + bDur;
+  return aStart < bEnd && bStart < aEnd;
+}
+
+export default function ReservationApp() {
+  const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState(todayISO);
+  const [zone, setZone] = useState(ZONES[0].id);
+  const [pax, setPax] = useState(2);
+  const [time, setTime] = useState("");
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let ignore = false;
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch(`/api/reservations?date=${date}&zone=${zone}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!ignore) setReservations(Array.isArray(data) ? data : []);
+      } catch (_e) {
+        if (!ignore) setError("Failed to load reservations.");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [date, zone]);
+
+  const availableSlots = useMemo(() => {
+    const taken = reservations.map((r) => ({ start: toMin(r.start), dur: r.duration }));
+    const allSlots = generateSlots(OPEN_TIME, CLOSE_TIME, SLOT_INTERVAL_MIN);
+    const free = allSlots.filter(
+      (slot) => !taken.some((t) => overlap(slot, DEFAULT_RES_DURATION_MIN, t.start, t.dur))
+    );
+    return free.map(toHHMM);
+  }, [reservations]);
+
+  const canContinueStep1 = Boolean(date && zone && pax > 0 && time);
+  const canConfirm = Boolean(name.trim() && phone.trim());
+
+  function resetAll() {
+    setStep(1);
+    setDate(todayISO);
+    setZone(ZONES[0].id);
+    setPax(2);
+    setTime("");
+    setName("");
+    setPhone("");
+    setEmail("");
+    setNotes("");
+  }
+
+  async function handleConfirm() {
+    setError("");
+    try {
+      setStep(3);
+    } catch (e) {
+      if (e instanceof Error) setError(e.message);
+    }
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-b from-amber-50 to-emerald-50 text-gray-900">
+      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
+        <header className="mb-8 md:mb-10">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Table Reservation</h1>
+          <p className="text-gray-600 mt-2">
+            Choose your date, zone, and time, then leave your details. Easy.
+          </p>
+        </header>
+
+        <Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <Step n={1} label="Choose Date / Zone / Time" active={step === 1} done={step > 1} />
+            <Step n={2} label="Your Details" active={step === 2} done={step > 2} />
+            <Step n={3} label="Confirmed" active={step === 3} done={false} />
+          </div>
+        </Card>
+
+        <div className="mt-6">
+          <AnimatePresence mode="wait">
+            {step === 1 && (
+              <motion.div
+                key="step1"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Date</label>
+                        <input
+                          type="date"
+                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                          value={date}
+                          min={todayISO}
+                          onChange={(e) => setDate(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Guests</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={pax}
+                          onChange={(e) => setPax(Number(e.target.value))}
+                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          For larger groups, please contact us.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Zone</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {ZONES.map((z) => (
+                            <button
+                              key={z.id}
+                              onClick={() => setZone(z.id)}
+                              className={
+                                "rounded-xl px-3 py-2 border text-left " +
+                                (zone === z.id
+                                  ? "border-black bg-black text-white"
+                                  : "border-gray-300 hover:border-black")
+                              }
+                            >
+                              <div className="text-sm font-semibold">{z.name}</div>
+                              <div className="text-xs opacity-70">Up to {z.capacity} seats</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Available time slots</label>
+                      {loading ? (
+                        <div className="text-sm text-gray-600">Loading...</div>
+                      ) : error ? (
+                        <div className="text-sm text-red-600">{error}</div>
+                      ) : availableSlots.length === 0 ? (
+                        <div className="text-sm text-gray-600">
+                          No slots available for this zone on the selected date.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-auto pr-1">
+                          {availableSlots.map((t) => (
+                            <button
+                              key={t}
+                              className={
+                                "rounded-xl border px-3 py-2 text-sm " +
+                                (time === t
+                                  ? "bg-emerald-600 text-white border-emerald-700"
+                                  : "border-gray-300 hover:border-emerald-600")
+                              }
+                              onClick={() => setTime(t)}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        Each reservation is for {DEFAULT_RES_DURATION_MIN} minutes.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-6">
+                    <div className="text-sm text-gray-600">
+                      Selected: {date} / {ZONES.find((z) => z.id === zone)?.name} / {time || "-"} /{" "}
+                      {pax} guest{pax > 1 ? "s" : ""}
+                    </div>
+                    <button
+                      disabled={!canContinueStep1}
+                      onClick={() => setStep(2)}
+                      className={
+                        "rounded-xl px-4 py-2 font-semibold " +
+                        (canContinueStep1
+                          ? "bg-black text-white hover:opacity-90"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed")
+                      }
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div
+                key="step2"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Full Name*</label>
+                        <input
+                          type="text"
+                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                          placeholder="Juan Dela Cruz"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Mobile Number*</label>
+                        <input
+                          type="tel"
+                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                          placeholder="09xx xxx xxxx"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Email</label>
+                        <input
+                          type="email"
+                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                          placeholder="you@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Notes (optional)</label>
+                      <textarea
+                        rows={8}
+                        className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                        placeholder="Allergies, occasions, special requests..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                      <div className="mt-4 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        <strong>Summary:</strong> {date} / {ZONES.find((z) => z.id === zone)?.name} / {time} /{" "}
+                        {pax} guest{pax > 1 ? "s" : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-6">
+                    <button
+                      onClick={() => setStep(1)}
+                      className="rounded-xl px-4 py-2 border border-gray-300 hover:border-black"
+                    >
+                      Back
+                    </button>
+                    <button
+                      disabled={!canConfirm}
+                      onClick={handleConfirm}
+                      className={
+                        "rounded-xl px-4 py-2 font-semibold " +
+                        (canConfirm
+                          ? "bg-black text-white hover:opacity-90"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed")
+                      }
+                    >
+                      Confirm Reservation
+                    </button>
+                  </div>
+
+                  {error && <div className="text-sm text-red-600 mt-3">{error}</div>}
+                </Card>
+              </motion.div>
+            )}
+
+            {step === 3 && (
+              <motion.div
+                key="step3"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card>
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-600 text-white grid place-items-center text-2xl font-bold">
+                      OK
+                    </div>
+                    <h2 className="text-2xl font-extrabold">Reservation Confirmed</h2>
+                    <p className="text-gray-600 max-w-xl mx-auto">
+                      Thanks, {name || "Guest"}! We have saved your table. A confirmation has
+                      been prepared below; in a real app this would also be sent via SMS / email.
+                    </p>
+
+                    <div className="text-left max-w-xl mx-auto bg-gray-50 border border-gray-200 rounded-2xl p-4">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="text-gray-500">Name</div>
+                        <div className="font-semibold">{name || "-"}</div>
+                        <div className="text-gray-500">Mobile</div>
+                        <div className="font-semibold">{phone || "-"}</div>
+                        <div className="text-gray-500">Email</div>
+                        <div className="font-semibold">{email || "-"}</div>
+                        <div className="text-gray-500">Date</div>
+                        <div className="font-semibold">{date}</div>
+                        <div className="text-gray-500">Time</div>
+                        <div className="font-semibold">
+                          {time} ({DEFAULT_RES_DURATION_MIN} mins)
+                        </div>
+                        <div className="text-gray-500">Zone</div>
+                        <div className="font-semibold">{ZONES.find((z) => z.id === zone)?.name}</div>
+                        <div className="text-gray-500">Guests</div>
+                        <div className="font-semibold">{pax}</div>
+                        <div className="text-gray-500">Notes</div>
+                        <div className="font-semibold whitespace-pre-wrap">{notes || "-"}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={() => setStep(1)}
+                        className="rounded-xl px-4 py-2 border border-gray-300 hover:border-black"
+                      >
+                        Make Another Booking
+                      </button>
+                      <button
+                        onClick={resetAll}
+                        className="rounded-xl px-4 py-2 bg-black text-white hover:opacity-90"
+                      >
+                        Start Over
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}

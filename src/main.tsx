@@ -1,10 +1,20 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
-import MenuApp from "./MenuApp";
+import MenuApp from "./menu/MenuApp";
+import ReservationApp from "./reservations/ReservationApp";
 
 function App() {
-  return <MenuApp />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/menu/:comapnyId" element={<MenuApp />} />
+        <Route path="/reservations" element={<ReservationApp />} />
+        <Route path="*" element={<Navigate to="/menu" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
