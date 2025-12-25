@@ -11,6 +11,8 @@ function App() {
       <Routes>
         <Route path="/menu" element={<MenuApp />} />
         <Route path="/menu/:companyId" element={<MenuApp />} />
+        {/* Backup Route since some links use it */}
+        <Route path="/" element={<MenuApp />} />
         <Route path="/reservations" element={<ReservationApp />} />
         <Route path="*" element={<Navigate to="/menu" replace />} />
       </Routes>
