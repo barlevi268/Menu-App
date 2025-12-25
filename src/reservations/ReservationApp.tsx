@@ -12,15 +12,21 @@ type CardProps = {
   children: React.ReactNode;
 };
 
-type Reservation = {
-  start: string;
-  duration: number;
-};
-
-type Zone = {
+type ReservationArea = {
   id: string;
   name: string;
-  capacity: number;
+  slots?: number | null;
+  timeAvailable?: string | null;
+  photoUrl?: string | null;
+};
+
+type ReservationSlot = {
+  id: string;
+  date: string;
+  time: string;
+  area?: ReservationArea | null;
+  areaId?: string;
+  area_id?: string;
 };
 
 const Step = ({ n, label, active, done }: StepProps) => (
@@ -47,98 +53,178 @@ const Card = ({ children }: CardProps) => (
   </div>
 );
 
-const OPEN_TIME = "10:00";
-const CLOSE_TIME = "22:00";
-const SLOT_INTERVAL_MIN = 30;
-const DEFAULT_RES_DURATION_MIN = 90;
-const ZONES: Zone[] = [
-  { id: "main", name: "Main Hall", capacity: 20 },
-  { id: "patio", name: "Patio", capacity: 3 },
-  { id: "bar", name: "Bar Counter", capacity: 12 },
-  { id: "window", name: "Window Seats", capacity: 10 },
-];
-
 const toMin = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
 };
-const toHHMM = (mins: number) => {
-  const h = Math.floor(mins / 60).toString().padStart(2, "0");
-  const m = (mins % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
+
+const addDays = (isoDate: string, days: number) => {
+  const d = new Date(isoDate);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 };
-function generateSlots(openHHMM: string, closeHHMM: string, intervalMin: number) {
-  const open = toMin(openHHMM);
-  const close = toMin(closeHHMM);
-  const slots = [] as number[];
-  for (let t = open; t + DEFAULT_RES_DURATION_MIN <= close; t += intervalMin) {
-    slots.push(t);
+
+const getCompanyIdFromPath = () => {
+  const params = new URLSearchParams(window.location.search);
+  const paramId =
+    params.get("companyId") ||
+    params.get("companyID") ||
+    params.get("id") ||
+    params.get("cid");
+
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (paramId) return paramId;
+  if (segments[0] === "reservations") {
+    return segments[1];
   }
-  return slots;
-}
-function overlap(aStart: number, aDur: number, bStart: number, bDur: number) {
-  const aEnd = aStart + aDur;
-  const bEnd = bStart + bDur;
-  return aStart < bEnd && bStart < aEnd;
-}
+  return segments[0];
+};
+
+const normalizeArea = (slot: ReservationSlot): ReservationArea | null => {
+  const area = slot.area ?? null;
+  const id = area?.id ?? slot.areaId ?? slot.area_id;
+  if (!id) return null;
+  return {
+    id,
+    name: area?.name ?? "Area",
+    slots: area?.slots ?? null,
+    timeAvailable: area?.timeAvailable ?? (area as any)?.time_available ?? null,
+    photoUrl: area?.photoUrl ?? (area as any)?.photo_url ?? null,
+  };
+};
 
 export default function ReservationApp() {
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const baseUrl = useMemo(
+    () => import.meta.env.VITE_API_BASE_URL || "https://api.orda.co",
+    []
+  );
+  const companyId = useMemo(() => getCompanyIdFromPath(), []);
 
   const [step, setStep] = useState(1);
   const [date, setDate] = useState(todayISO);
-  const [zone, setZone] = useState(ZONES[0].id);
+  const [areaId, setAreaId] = useState<string>("");
   const [pax, setPax] = useState(2);
   const [time, setTime] = useState("");
+  const [selectedSlotId, setSelectedSlotId] = useState("");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
 
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [areas, setAreas] = useState<ReservationArea[]>([]);
+  const [slots, setSlots] = useState<ReservationSlot[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!companyId) {
+      setError("Missing company id.");
+      return;
+    }
+
     let ignore = false;
-    async function load() {
+    async function loadAreas() {
+      setError("");
+      try {
+        const from = todayISO;
+        const to = addDays(todayISO, 7);
+        const url = new URL(`${baseUrl}/reservations/slots/vacant`);
+        url.searchParams.set("companyId", companyId);
+        url.searchParams.set("from", from);
+        url.searchParams.set("to", to);
+
+        const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          throw new Error(`Failed to load areas: ${res.status}`);
+        }
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data?.data ?? data?.documents ?? [];
+        const areaMap = new Map<string, ReservationArea>();
+        list.forEach((slot: ReservationSlot) => {
+          const area = normalizeArea(slot);
+          if (area) areaMap.set(area.id, area);
+        });
+        const nextAreas = Array.from(areaMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+        if (!ignore) {
+          setAreas(nextAreas);
+          if (nextAreas.length > 0 && !nextAreas.find((a) => a.id === areaId)) {
+            setAreaId(nextAreas[0].id);
+          }
+        }
+      } catch (e) {
+        if (!ignore) {
+          setAreas([]);
+          setError(e instanceof Error ? e.message : "Failed to load areas.");
+        }
+      }
+    }
+
+    loadAreas();
+    return () => {
+      ignore = true;
+    };
+  }, [baseUrl, companyId, todayISO]);
+
+  useEffect(() => {
+    if (!companyId || !date || !areaId) return;
+
+    let ignore = false;
+    async function loadSlots() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(`/api/reservations?date=${date}&zone=${zone}`, { cache: "no-store" });
+        const url = new URL(`${baseUrl}/reservations/slots/vacant`);
+        url.searchParams.set("companyId", companyId);
+        url.searchParams.set("from", date);
+        url.searchParams.set("to", date);
+        url.searchParams.set("areaId", areaId);
+        const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          throw new Error(`Failed to load slots: ${res.status}`);
+        }
         const data = await res.json();
-        if (!ignore) setReservations(Array.isArray(data) ? data : []);
-      } catch (_e) {
-        if (!ignore) setError("Failed to load reservations.");
+        const list = Array.isArray(data) ? data : data?.data ?? data?.documents ?? [];
+        if (!ignore) setSlots(list);
+      } catch (e) {
+        if (!ignore) {
+          setSlots([]);
+          setError(e instanceof Error ? e.message : "Failed to load slots.");
+        }
       } finally {
         if (!ignore) setLoading(false);
       }
     }
-    load();
+
+    loadSlots();
     return () => {
       ignore = true;
     };
-  }, [date, zone]);
+  }, [areaId, baseUrl, companyId, date]);
+
+  useEffect(() => {
+    setTime("");
+    setSelectedSlotId("");
+  }, [areaId, date]);
 
   const availableSlots = useMemo(() => {
-    const taken = reservations.map((r) => ({ start: toMin(r.start), dur: r.duration }));
-    const allSlots = generateSlots(OPEN_TIME, CLOSE_TIME, SLOT_INTERVAL_MIN);
-    const free = allSlots.filter(
-      (slot) => !taken.some((t) => overlap(slot, DEFAULT_RES_DURATION_MIN, t.start, t.dur))
-    );
-    return free.map(toHHMM);
-  }, [reservations]);
+    const sorted = [...slots].sort((a, b) => toMin(a.time) - toMin(b.time));
+    return sorted;
+  }, [slots]);
 
-  const canContinueStep1 = Boolean(date && zone && pax > 0 && time);
+  const selectedArea = areas.find((area) => area.id === areaId);
+  const canContinueStep1 = Boolean(date && areaId && pax > 0 && selectedSlotId);
   const canConfirm = Boolean(name.trim() && phone.trim());
 
   function resetAll() {
     setStep(1);
     setDate(todayISO);
-    setZone(ZONES[0].id);
+    setAreaId(areas[0]?.id ?? "");
     setPax(2);
     setTime("");
+    setSelectedSlotId("");
     setName("");
     setPhone("");
     setEmail("");
@@ -147,10 +233,38 @@ export default function ReservationApp() {
 
   async function handleConfirm() {
     setError("");
+    if (!selectedSlotId) {
+      setError("Please select a time slot.");
+      return;
+    }
+
     try {
+      setSubmitting(true);
+      const payload = {
+        slotId: selectedSlotId,
+        pax,
+        reservationNotes: notes.trim() || undefined,
+        customerName: name.trim(),
+        customerMobileNumber: phone.trim(),
+        customerEmail: email.trim() || undefined,
+      };
+      const res = await fetch(`${baseUrl}/reservations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || `Failed to submit reservation: ${res.status}`);
+      }
       setStep(3);
     } catch (e) {
-      if (e instanceof Error) setError(e.message);
+      setError(e instanceof Error ? e.message : "Failed to submit reservation.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -160,13 +274,13 @@ export default function ReservationApp() {
         <header className="mb-8 md:mb-10">
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Table Reservation</h1>
           <p className="text-gray-600 mt-2">
-            Choose your date, zone, and time, then leave your details. Easy.
+            Choose your date, area, and time, then leave your details. Easy.
           </p>
         </header>
 
         <Card>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            <Step n={1} label="Choose Date / Zone / Time" active={step === 1} done={step > 1} />
+            <Step n={1} label="Choose Date / Area / Time" active={step === 1} done={step > 1} />
             <Step n={2} label="Your Details" active={step === 2} done={step > 2} />
             <Step n={3} label="Confirmed" active={step === 3} done={false} />
           </div>
@@ -212,24 +326,30 @@ export default function ReservationApp() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-1">Zone</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {ZONES.map((z) => (
-                            <button
-                              key={z.id}
-                              onClick={() => setZone(z.id)}
-                              className={
-                                "rounded-xl px-3 py-2 border text-left " +
-                                (zone === z.id
-                                  ? "border-black bg-black text-white"
-                                  : "border-gray-300 hover:border-black")
-                              }
-                            >
-                              <div className="text-sm font-semibold">{z.name}</div>
-                              <div className="text-xs opacity-70">Up to {z.capacity} seats</div>
-                            </button>
-                          ))}
-                        </div>
+                        <label className="block text-sm font-medium mb-1">Area</label>
+                        {areas.length === 0 && !loading ? (
+                          <div className="text-sm text-gray-500">No areas with vacant slots.</div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            {areas.map((area) => (
+                              <button
+                                key={area.id}
+                                onClick={() => setAreaId(area.id)}
+                                className={
+                                  "rounded-xl px-3 py-2 border text-left " +
+                                  (areaId === area.id
+                                    ? "border-black bg-black text-white"
+                                    : "border-gray-300 hover:border-black")
+                                }
+                              >
+                                <div className="text-sm font-semibold">{area.name}</div>
+                                <div className="text-xs opacity-70">
+                                  {area.slots ? `Up to ${area.slots} seats` : "See availability"}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -241,36 +361,40 @@ export default function ReservationApp() {
                         <div className="text-sm text-red-600">{error}</div>
                       ) : availableSlots.length === 0 ? (
                         <div className="text-sm text-gray-600">
-                          No slots available for this zone on the selected date.
+                          No vacant slots for this area on the selected date.
                         </div>
                       ) : (
                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-auto pr-1">
-                          {availableSlots.map((t) => (
+                          {availableSlots.map((slot) => (
                             <button
-                              key={t}
+                              key={slot.id}
                               className={
                                 "rounded-xl border px-3 py-2 text-sm " +
-                                (time === t
+                                (selectedSlotId === slot.id
                                   ? "bg-emerald-600 text-white border-emerald-700"
                                   : "border-gray-300 hover:border-emerald-600")
                               }
-                              onClick={() => setTime(t)}
+                              onClick={() => {
+                                setTime(slot.time);
+                                setSelectedSlotId(slot.id);
+                              }}
                             >
-                              {t}
+                              {slot.time}
                             </button>
                           ))}
                         </div>
                       )}
-                      <p className="text-xs text-gray-500 mt-2">
-                        Each reservation is for {DEFAULT_RES_DURATION_MIN} minutes.
-                      </p>
+                      {selectedArea?.timeAvailable ? (
+                        <p className="text-xs text-gray-500 mt-2">{selectedArea.timeAvailable}</p>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between mt-6">
                     <div className="text-sm text-gray-600">
-                      Selected: {date} / {ZONES.find((z) => z.id === zone)?.name} / {time || "-"} /{" "}
-                      {pax} guest{pax > 1 ? "s" : ""}
+                      Selected: {date} / {selectedArea?.name ?? "-"} / {time || "-"} / {pax} guest{
+                        pax > 1 ? "s" : ""
+                      }
                     </div>
                     <button
                       disabled={!canContinueStep1}
@@ -342,8 +466,9 @@ export default function ReservationApp() {
                         onChange={(e) => setNotes(e.target.value)}
                       />
                       <div className="mt-4 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
-                        <strong>Summary:</strong> {date} / {ZONES.find((z) => z.id === zone)?.name} / {time} /{" "}
-                        {pax} guest{pax > 1 ? "s" : ""}
+                        <strong>Summary:</strong> {date} / {selectedArea?.name ?? "-"} / {time} / {pax} guest{
+                          pax > 1 ? "s" : ""
+                        }
                       </div>
                     </div>
                   </div>
@@ -356,16 +481,16 @@ export default function ReservationApp() {
                       Back
                     </button>
                     <button
-                      disabled={!canConfirm}
+                      disabled={!canConfirm || submitting}
                       onClick={handleConfirm}
                       className={
                         "rounded-xl px-4 py-2 font-semibold " +
-                        (canConfirm
+                        (canConfirm && !submitting
                           ? "bg-black text-white hover:opacity-90"
                           : "bg-gray-300 text-gray-500 cursor-not-allowed")
                       }
                     >
-                      Confirm Reservation
+                      {submitting ? "Submitting..." : "Confirm Reservation"}
                     </button>
                   </div>
 
@@ -389,8 +514,8 @@ export default function ReservationApp() {
                     </div>
                     <h2 className="text-2xl font-extrabold">Reservation Confirmed</h2>
                     <p className="text-gray-600 max-w-xl mx-auto">
-                      Thanks, {name || "Guest"}! We have saved your table. A confirmation has
-                      been prepared below; in a real app this would also be sent via SMS / email.
+                      Thanks, {name || "Guest"}! We have saved your table. A confirmation has been
+                      prepared below; in a real app this would also be sent via SMS / email.
                     </p>
 
                     <div className="text-left max-w-xl mx-auto bg-gray-50 border border-gray-200 rounded-2xl p-4">
@@ -404,11 +529,9 @@ export default function ReservationApp() {
                         <div className="text-gray-500">Date</div>
                         <div className="font-semibold">{date}</div>
                         <div className="text-gray-500">Time</div>
-                        <div className="font-semibold">
-                          {time} ({DEFAULT_RES_DURATION_MIN} mins)
-                        </div>
-                        <div className="text-gray-500">Zone</div>
-                        <div className="font-semibold">{ZONES.find((z) => z.id === zone)?.name}</div>
+                        <div className="font-semibold">{time}</div>
+                        <div className="text-gray-500">Area</div>
+                        <div className="font-semibold">{selectedArea?.name ?? "-"}</div>
                         <div className="text-gray-500">Guests</div>
                         <div className="font-semibold">{pax}</div>
                         <div className="text-gray-500">Notes</div>
@@ -435,6 +558,10 @@ export default function ReservationApp() {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+
+        <div className="mt-6 text-xs text-gray-500 space-y-1">
+          <p>Powered by the reservations public API.</p>
         </div>
       </div>
     </div>
