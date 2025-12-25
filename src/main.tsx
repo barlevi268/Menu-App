@@ -7,7 +7,7 @@ import ReservationApp from "./reservations/ReservationApp";
 
 function App() {
   return (
-    <BrowserRouter>
+    
       <Routes>
         <Route path="/menu" element={<MenuApp />} />
         <Route path="/menu/:companyId" element={<MenuApp />} />
@@ -16,12 +16,14 @@ function App() {
         <Route path="/reservations" element={<ReservationApp />} />
         <Route path="*" element={<Navigate to="/menu" replace />} />
       </Routes>
-    </BrowserRouter>
+    
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+        <App />
+    </BrowserRouter>
   </React.StrictMode>
 );
