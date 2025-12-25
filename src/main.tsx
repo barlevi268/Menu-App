@@ -9,7 +9,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/menu/:comapnyId" element={<MenuApp />} />
+        <Route path="/menu" element={<MenuApp />} />
+        <Route path="/menu/:companyId" element={<MenuApp />} />
         <Route path="/reservations" element={<ReservationApp />} />
         <Route path="*" element={<Navigate to="/menu" replace />} />
       </Routes>
