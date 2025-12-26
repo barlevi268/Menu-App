@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 type StepProps = {
@@ -27,6 +27,26 @@ type ReservationSlot = {
   area?: ReservationArea | null;
   areaId?: string;
   area_id?: string;
+};
+
+type ReservationPreferences = {
+  slotDurationMinutes?: number | null;
+  openingHour?: number | null;
+  closingHour?: number | null;
+  maxPartySize?: number | null;
+  confirmationRequired?: boolean | null;
+  externalSlug?: string | null;
+};
+
+type ReservationCompany = {
+  name?: string | null;
+  address?: string | null;
+};
+
+type PreferencesResponse = {
+  company?: ReservationCompany | null;
+  preferences?: ReservationPreferences | null;
+  areas?: ReservationArea[] | null;
 };
 
 const Step = ({ n, label, active, done }: StepProps) => (
@@ -58,12 +78,6 @@ const toMin = (hhmm: string) => {
   return h * 60 + m;
 };
 
-const addDays = (isoDate: string, days: number) => {
-  const d = new Date(isoDate);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-};
-
 const getCompanyIdFromPath = () => {
   const params = new URLSearchParams(window.location.search);
   const paramId =
@@ -78,19 +92,6 @@ const getCompanyIdFromPath = () => {
     return segments[1];
   }
   return segments[0];
-};
-
-const normalizeArea = (slot: ReservationSlot): ReservationArea | null => {
-  const area = slot.area ?? null;
-  const id = area?.id ?? slot.areaId ?? slot.area_id;
-  if (!id) return null;
-  return {
-    id,
-    name: area?.name ?? "Area",
-    slots: area?.slots ?? null,
-    timeAvailable: area?.timeAvailable ?? (area as any)?.time_available ?? null,
-    photoUrl: area?.photoUrl ?? (area as any)?.photo_url ?? null,
-  };
 };
 
 export default function ReservationApp() {
@@ -115,65 +116,72 @@ export default function ReservationApp() {
 
   const [areas, setAreas] = useState<ReservationArea[]>([]);
   const [slots, setSlots] = useState<ReservationSlot[]>([]);
+  const [areasLoading, setAreasLoading] = useState(true);
+  const [preferences, setPreferences] = useState<ReservationPreferences | null>(null);
+  const [company, setCompany] = useState<ReservationCompany | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [slotsLoaded, setSlotsLoaded] = useState(false);
   const [error, setError] = useState("");
+
+  const didLoadPreferencesRef = useRef(false);
+  const lastSlotQueryRef = useRef<string>("");
 
   useEffect(() => {
     if (!companyId) {
+      setAreasLoading(false);
       setError("Missing company id.");
       return;
     }
+    if (didLoadPreferencesRef.current) return;
 
+    const controller = new AbortController();
     let ignore = false;
-    async function loadAreas() {
+
+    async function loadPreferences() {
+      setAreasLoading(true);
       setError("");
       try {
-        const from = todayISO;
-        const to = addDays(todayISO, 7);
-        const url = new URL(`${baseUrl}/reservations/slots/vacant`);
-        url.searchParams.set("companyId", companyId);
-        url.searchParams.set("from", from);
-        url.searchParams.set("to", to);
-
-        const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+        const res = await fetch(`${baseUrl}/public/reservations/preferences/${companyId}`, {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
         if (!res.ok) {
           throw new Error(`Failed to load areas: ${res.status}`);
         }
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : data?.data ?? data?.documents ?? [];
-        const areaMap = new Map<string, ReservationArea>();
-        list.forEach((slot: ReservationSlot) => {
-          const area = normalizeArea(slot);
-          if (area) areaMap.set(area.id, area);
-        });
-        const nextAreas = Array.from(areaMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-        if (!ignore) {
-          setAreas(nextAreas);
-          if (nextAreas.length > 0 && !nextAreas.find((a) => a.id === areaId)) {
-            setAreaId(nextAreas[0].id);
-          }
-        }
+        const data = (await res.json()) as PreferencesResponse;
+        if (ignore) return;
+        setCompany(data.company ?? null);
+        setPreferences(data.preferences ?? null);
+        setAreas(Array.isArray(data.areas) ? data.areas : []);
+        didLoadPreferencesRef.current = true;
       } catch (e) {
-        if (!ignore) {
-          setAreas([]);
-          setError(e instanceof Error ? e.message : "Failed to load areas.");
-        }
+        if (controller.signal.aborted || ignore) return;
+        setAreas([]);
+        setError(e instanceof Error ? e.message : "Failed to load areas.");
+      } finally {
+        if (!controller.signal.aborted && !ignore) setAreasLoading(false);
       }
     }
 
-    loadAreas();
+    loadPreferences();
     return () => {
       ignore = true;
+      controller.abort();
     };
-  }, [baseUrl, companyId, todayISO]);
+  }, [baseUrl, companyId]);
 
   useEffect(() => {
     if (!companyId || !date || !areaId) return;
 
+    const queryKey = `${companyId}|${areaId}|${date}`;
+    if (lastSlotQueryRef.current === queryKey) return;
+    lastSlotQueryRef.current = queryKey;
+
     let ignore = false;
     async function loadSlots() {
       setLoading(true);
+      setSlotsLoaded(false);
       setError("");
       try {
         const url = new URL(`${baseUrl}/reservations/slots/vacant`);
@@ -194,7 +202,10 @@ export default function ReservationApp() {
           setError(e instanceof Error ? e.message : "Failed to load slots.");
         }
       } finally {
-        if (!ignore) setLoading(false);
+        if (!ignore) {
+          setSlotsLoaded(true);
+          setLoading(false);
+        }
       }
     }
 
@@ -207,21 +218,25 @@ export default function ReservationApp() {
   useEffect(() => {
     setTime("");
     setSelectedSlotId("");
+    setSlots([]);
+    setSlotsLoaded(false);
   }, [areaId, date]);
 
   const availableSlots = useMemo(() => {
-    const sorted = [...slots].sort((a, b) => toMin(a.time) - toMin(b.time));
-    return sorted;
+    return [...slots].sort((a, b) => toMin(a.time) - toMin(b.time));
   }, [slots]);
 
   const selectedArea = areas.find((area) => area.id === areaId);
+  const maxPartySize = preferences?.maxPartySize ?? 20;
+  const slotDuration = preferences?.slotDurationMinutes ?? null;
+
   const canContinueStep1 = Boolean(date && areaId && pax > 0 && selectedSlotId);
   const canConfirm = Boolean(name.trim() && phone.trim());
 
   function resetAll() {
     setStep(1);
     setDate(todayISO);
-    setAreaId(areas[0]?.id ?? "");
+    setAreaId("");
     setPax(2);
     setTime("");
     setSelectedSlotId("");
@@ -274,7 +289,7 @@ export default function ReservationApp() {
         <header className="mb-8 md:mb-10">
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Table Reservation</h1>
           <p className="text-gray-600 mt-2">
-            Choose your date, area, and time, then leave your details. Easy.
+            {company?.name ? `Reserve at ${company.name}.` : "Choose your date, area, and time."}
           </p>
         </header>
 
@@ -315,20 +330,20 @@ export default function ReservationApp() {
                         <input
                           type="number"
                           min={1}
-                          max={20}
+                          max={maxPartySize}
                           value={pax}
                           onChange={(e) => setPax(Number(e.target.value))}
                           className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          For larger groups, please contact us.
-                        </p>
+                        <p className="text-xs text-gray-500 mt-1">Max party size: {maxPartySize}</p>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium mb-1">Area</label>
-                        {areas.length === 0 && !loading ? (
-                          <div className="text-sm text-gray-500">No areas with vacant slots.</div>
+                        {areasLoading ? (
+                          <div className="text-sm text-gray-500">Loading areas...</div>
+                        ) : areas.length === 0 ? (
+                          <div className="text-sm text-gray-500">No areas published yet.</div>
                         ) : (
                           <div className="grid grid-cols-2 gap-2">
                             {areas.map((area) => (
@@ -344,7 +359,8 @@ export default function ReservationApp() {
                               >
                                 <div className="text-sm font-semibold">{area.name}</div>
                                 <div className="text-xs opacity-70">
-                                  {area.slots ? `Up to ${area.slots} seats` : "See availability"}
+                                  {area.timeAvailable ||
+                                    (area.slots ? `Up to ${area.slots} seats` : "See availability")}
                                 </div>
                               </button>
                             ))}
@@ -355,11 +371,13 @@ export default function ReservationApp() {
 
                     <div>
                       <label className="block text-sm font-medium mb-2">Available time slots</label>
-                      {loading ? (
+                      {!areaId ? (
+                        <div className="text-sm text-gray-600">Select an area to see times.</div>
+                      ) : loading ? (
                         <div className="text-sm text-gray-600">Loading...</div>
                       ) : error ? (
                         <div className="text-sm text-red-600">{error}</div>
-                      ) : availableSlots.length === 0 ? (
+                      ) : slotsLoaded && availableSlots.length === 0 ? (
                         <div className="text-sm text-gray-600">
                           No vacant slots for this area on the selected date.
                         </div>
@@ -386,6 +404,11 @@ export default function ReservationApp() {
                       )}
                       {selectedArea?.timeAvailable ? (
                         <p className="text-xs text-gray-500 mt-2">{selectedArea.timeAvailable}</p>
+                      ) : null}
+                      {slotDuration ? (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Each reservation is for {slotDuration} minutes.
+                        </p>
                       ) : null}
                     </div>
                   </div>
