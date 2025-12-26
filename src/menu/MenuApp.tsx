@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Coffee, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { themeClasses } from './themeClasses';
+import themeClasses from './themeClasses';
 
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
 

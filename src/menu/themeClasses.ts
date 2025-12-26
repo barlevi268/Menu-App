@@ -1,4 +1,4 @@
-export const themeClasses = {
+const themeClasses = {
     slate: {
         header: 'from-slate-500 to-slate-700',
         accentBg: 'bg-slate-500',
@@ -176,3 +176,5 @@ export const themeClasses = {
         groupActive: 'bg-rose-500 text-white',
     },
 } as const;
+
+export default themeClasses;
