@@ -101,6 +101,7 @@ const MenuApp = () => {
   const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
@@ -331,6 +332,10 @@ const MenuApp = () => {
 
   // Fetch products from API endpoint
   React.useEffect(() => {
+    document.title = companyName ? `${companyName} Menu` : 'Menu';
+  }, [companyName]);
+
+  React.useEffect(() => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
@@ -358,6 +363,12 @@ const MenuApp = () => {
           throw new Error(`Expected JSON but received: ${bodyText.slice(0, 120)}...`);
         }
         const data = await res.json();
+        setCompanyName(
+          data?.company?.name ??
+            data?.companyName ??
+            data?.company_name ??
+            null
+        );
         const preferences = getPreferences(data);
         const rawItems = Array.isArray(data)
           ? data

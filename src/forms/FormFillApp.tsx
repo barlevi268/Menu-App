@@ -71,6 +71,11 @@ export default function FormFillApp() {
   const [submitSuccess, setSubmitSuccess] = useState("");
 
   useEffect(() => {
+    const title = form?.name ? `${form.name} Form` : "Form";
+    document.title = title;
+  }, [form?.name]);
+
+  useEffect(() => {
     if (!identifier) {
       setLoading(false);
       setError("Missing form slug or ID.");

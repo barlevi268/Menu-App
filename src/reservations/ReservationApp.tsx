@@ -1,5 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import {
+  Button,
+  Card,
+  CardBody,
+  Chip,
+  DatePicker,
+  Input,
+  RadioGroup,
+  VisuallyHidden,
+  Spinner,
+  Textarea,
+  cn,
+  useRadio,
+} from "@heroui/react";
+import type { RadioProps } from "@heroui/react";
+import { parseDate } from "@internationalized/date";
 
 type StepProps = {
   n: number;
@@ -8,8 +24,43 @@ type StepProps = {
   done: boolean;
 };
 
-type CardProps = {
-  children: React.ReactNode;
+const CustomRadio = (props: RadioProps) => {
+  const {
+    Component,
+    children,
+    description,
+    getBaseProps,
+    getWrapperProps,
+    getInputProps,
+    getLabelProps,
+    getLabelWrapperProps,
+    getControlProps,
+  } = useRadio(props);
+
+  return (
+    <Component
+      {...getBaseProps({
+        className: cn(
+          "group inline-flex items-center hover:opacity-70 active:opacity-50 justify-between flex-row-reverse tap-highlight-transparent m-0",
+          "w-full cursor-pointer border-2 border-default rounded-lg gap-4 p-3",
+          "data-[selected=true]:border-primary"
+        ),
+      })}
+    >
+      <VisuallyHidden>
+        <input {...getInputProps()} />
+      </VisuallyHidden>
+      <span {...getWrapperProps()}>
+        <span {...getControlProps()} />
+      </span>
+      <div {...getLabelWrapperProps()}>
+        {children && <span {...getLabelProps()}>{children}</span>}
+        {description && (
+          <span className="text-small text-foreground opacity-70">{description}</span>
+        )}
+      </div>
+    </Component>
+  );
 };
 
 type ReservationArea = {
@@ -50,26 +101,16 @@ type PreferencesResponse = {
 };
 
 const Step = ({ n, label, active, done }: StepProps) => (
-  <div className="flex items-center gap-3">
-    <div
-      className={[
-        "w-8 h-8 rounded-full grid place-items-center text-sm font-bold",
-        done
-          ? "bg-green-600 text-white"
-          : active
-          ? "bg-black text-white"
-          : "bg-gray-200 text-gray-600",
-      ].join(" ")}
+  <div className={`flex items-center gap-3  ${!active && 'hidden'}`}>
+    <Chip
+      size="sm"
+      className={`justify-center font-semibold`}
+      color={done ? "success" : active ? "default" : "default"}
+      variant={done || active ? "solid" : "flat"}
     >
-      {done ? "OK" : n}
-    </div>
-    <div className={"text-sm " + (active ? "font-semibold" : "text-gray-500")}>{label}</div>
-  </div>
-);
-
-const Card = ({ children }: CardProps) => (
-  <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-5 md:p-6 border border-gray-100">
-    {children}
+      {n}
+    </Chip>
+    <div className={"text-sm font-semibold"}>{active && label}</div>
   </div>
 );
 
@@ -126,6 +167,11 @@ export default function ReservationApp() {
 
   const didLoadPreferencesRef = useRef(false);
   const lastSlotQueryRef = useRef<string>("");
+
+  useEffect(() => {
+    const title = company?.name ? `${company.name} Reservations` : "Reservations";
+    document.title = title;
+  }, [company?.name]);
 
   useEffect(() => {
     if (!companyId) {
@@ -293,12 +339,12 @@ export default function ReservationApp() {
           </p>
         </header>
 
-        <Card>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+          <CardBody className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             <Step n={1} label="Choose Date / Area / Time" active={step === 1} done={step > 1} />
             <Step n={2} label="Your Details" active={step === 2} done={step > 2} />
             <Step n={3} label="Confirmed" active={step === 3} done={false} />
-          </div>
+          </CardBody>
         </Card>
 
         <div className="mt-6">
@@ -311,70 +357,69 @@ export default function ReservationApp() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card>
-                  <div className="grid md:grid-cols-2 gap-6">
+                <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+                  <CardBody className="grid md:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Date</label>
-                        <input
-                          type="date"
-                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
-                          value={date}
-                          min={todayISO}
-                          onChange={(e) => setDate(e.target.value)}
-                        />
-                      </div>
+                      <DatePicker
+                        label="Date"
+                        value={date ? parseDate(date) : null}
+                        minValue={parseDate(todayISO)}
+                        onChange={(next) => setDate(next ? next.toString() : todayISO)}
+                      />
+
+                      <Input
+                        label="Guests"
+                        type="number"
+                        min={1}
+                        max={maxPartySize}
+                        value={String(pax)}
+                        onValueChange={(next) => setPax(Number(next))}
+                        description={`Max party size: ${maxPartySize}`}
+                      />
 
                       <div>
-                        <label className="block text-sm font-medium mb-1">Guests</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={maxPartySize}
-                          value={pax}
-                          onChange={(e) => setPax(Number(e.target.value))}
-                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">Max party size: {maxPartySize}</p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Area</label>
+                        <div className="text-sm font-medium text-gray-700 mb-2">Area</div>
                         {areasLoading ? (
-                          <div className="text-sm text-gray-500">Loading areas...</div>
+                          <div className="flex items-center gap-2 text-sm text-gray-500">
+                            <Spinner size="sm" />
+                            Loading areas...
+                          </div>
                         ) : areas.length === 0 ? (
                           <div className="text-sm text-gray-500">No areas published yet.</div>
                         ) : (
-                          <div className="grid grid-cols-2 gap-2">
+                          <RadioGroup
+                            value={areaId}
+                            onValueChange={setAreaId}
+                            classNames={{ wrapper: "grid grid-cols-2 gap-2" }}
+                          >
                             {areas.map((area) => (
-                              <button
+                              <CustomRadio
                                 key={area.id}
-                                onClick={() => setAreaId(area.id)}
-                                className={
-                                  "rounded-xl px-3 py-2 border text-left " +
-                                  (areaId === area.id
-                                    ? "border-black bg-black text-white"
-                                    : "border-gray-300 hover:border-black")
+                                value={area.id}
+                                description={
+                                  area.timeAvailable ||
+                                  (area.slots ? `Up to ${area.slots} seats` : "See availability")
                                 }
                               >
-                                <div className="text-sm font-semibold">{area.name}</div>
-                                <div className="text-xs opacity-70">
-                                  {area.timeAvailable ||
-                                    (area.slots ? `Up to ${area.slots} seats` : "See availability")}
-                                </div>
-                              </button>
+                                <span className="text-sm font-semibold">{area.name}</span>
+                              </CustomRadio>
                             ))}
-                          </div>
+                          </RadioGroup>
                         )}
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">Available time slots</label>
+                      <div className="text-sm font-medium text-gray-700 mb-2">
+                        Available time slots
+                      </div>
                       {!areaId ? (
                         <div className="text-sm text-gray-600">Select an area to see times.</div>
                       ) : loading ? (
-                        <div className="text-sm text-gray-600">Loading...</div>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Spinner size="sm" />
+                          Loading...
+                        </div>
                       ) : error ? (
                         <div className="text-sm text-red-600">{error}</div>
                       ) : slotsLoaded && availableSlots.length === 0 ? (
@@ -382,23 +427,20 @@ export default function ReservationApp() {
                           No vacant slots for this area on the selected date.
                         </div>
                       ) : (
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-auto pr-1">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 overflow-auto pr-1">
                           {availableSlots.map((slot) => (
-                            <button
+                            <Button
                               key={slot.id}
-                              className={
-                                "rounded-xl border px-3 py-2 text-sm " +
-                                (selectedSlotId === slot.id
-                                  ? "bg-emerald-600 text-white border-emerald-700"
-                                  : "border-gray-300 hover:border-emerald-600")
-                              }
-                              onClick={() => {
+                              size="md"
+                              variant={selectedSlotId === slot.id ? "solid" : "bordered"}
+                              color={selectedSlotId === slot.id ? "success" : "default"}
+                              onPress={() => {
                                 setTime(slot.time);
                                 setSelectedSlotId(slot.id);
                               }}
                             >
                               {slot.time}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       )}
@@ -411,7 +453,6 @@ export default function ReservationApp() {
                         </p>
                       ) : null}
                     </div>
-                  </div>
 
                   <div className="flex items-center justify-between mt-6">
                     <div className="text-sm text-gray-600">
@@ -419,19 +460,15 @@ export default function ReservationApp() {
                         pax > 1 ? "s" : ""
                       }
                     </div>
-                    <button
-                      disabled={!canContinueStep1}
-                      onClick={() => setStep(2)}
-                      className={
-                        "rounded-xl px-4 py-2 font-semibold " +
-                        (canContinueStep1
-                          ? "bg-black text-white hover:opacity-90"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed")
-                      }
+                    <Button
+                      color="primary"
+                      isDisabled={!canContinueStep1}
+                      onPress={() => setStep(2)}
                     >
                       Continue
-                    </button>
+                    </Button>
                   </div>
+                  </CardBody>
                 </Card>
               </motion.div>
             )}
@@ -444,77 +481,63 @@ export default function ReservationApp() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card>
-                  <div className="grid md:grid-cols-2 gap-6">
+                <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+                  <CardBody className="grid md:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Full Name*</label>
-                        <input
-                          type="text"
-                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
-                          placeholder="Juan Dela Cruz"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Mobile Number*</label>
-                        <input
-                          type="tel"
-                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
-                          placeholder="09xx xxx xxxx"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Email</label>
-                        <input
-                          type="email"
-                          className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
-                          placeholder="you@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                        />
-                      </div>
+                      <Input
+                        label="Full Name"
+                        isRequired
+                        placeholder="Juan Dela Cruz"
+                        value={name}
+                        onValueChange={setName}
+                      />
+                      <Input
+                        label="Mobile Number"
+                        isRequired
+                        type="tel"
+                        placeholder="09xx xxx xxxx"
+                        value={phone}
+                        onValueChange={setPhone}
+                      />
+                      <Input
+                        label="Email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onValueChange={setEmail}
+                      />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-1">Notes (optional)</label>
-                      <textarea
-                        rows={8}
-                        className="w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-black focus:border-black"
+                      <Textarea
+                        label="Notes (optional)"
+                        minRows={8}
                         placeholder="Allergies, occasions, special requests..."
                         value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
+                        onValueChange={setNotes}
                       />
-                      <div className="mt-4 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <Card className="mt-4 bg-amber-50 border border-amber-200">
+                        <CardBody className="text-sm">
                         <strong>Summary:</strong> {date} / {selectedArea?.name ?? "-"} / {time} / {pax} guest{
                           pax > 1 ? "s" : ""
                         }
-                      </div>
+                        </CardBody>
+                      </Card>
                     </div>
-                  </div>
+                  </CardBody>
 
-                  <div className="flex items-center justify-between mt-6">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="rounded-xl px-4 py-2 border border-gray-300 hover:border-black"
-                    >
+                  <div className="flex items-center justify-between mt-6 p-3">
+                    <Button variant="bordered" onPress={() => setStep(1)}>
                       Back
-                    </button>
-                    <button
-                      disabled={!canConfirm || submitting}
-                      onClick={handleConfirm}
-                      className={
-                        "rounded-xl px-4 py-2 font-semibold " +
-                        (canConfirm && !submitting
-                          ? "bg-black text-white hover:opacity-90"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed")
-                      }
+                    </Button>
+                    <Button
+                      color="primary"
+                      isDisabled={!canConfirm}
+                      isLoading={submitting}
+                      onPress={handleConfirm}
                     >
-                      {submitting ? "Submitting..." : "Confirm Reservation"}
-                    </button>
+                      Confirm Reservation
+                    </Button>
                   </div>
 
                   {error && <div className="text-sm text-red-600 mt-3">{error}</div>}
@@ -530,8 +553,8 @@ export default function ReservationApp() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card>
-                  <div className="text-center space-y-4">
+                <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+                  <CardBody className="text-center space-y-4">
                     <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-600 text-white grid place-items-center text-2xl font-bold">
                       OK
                     </div>
@@ -541,7 +564,8 @@ export default function ReservationApp() {
                       prepared below; in a real app this would also be sent via SMS / email.
                     </p>
 
-                    <div className="text-left max-w-xl mx-auto bg-gray-50 border border-gray-200 rounded-2xl p-4">
+                    <Card className="text-left max-w-xl mx-auto bg-gray-50 border border-gray-200">
+                      <CardBody className="p-4">
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div className="text-gray-500">Name</div>
                         <div className="font-semibold">{name || "-"}</div>
@@ -560,31 +584,22 @@ export default function ReservationApp() {
                         <div className="text-gray-500">Notes</div>
                         <div className="font-semibold whitespace-pre-wrap">{notes || "-"}</div>
                       </div>
-                    </div>
+                      </CardBody>
+                    </Card>
 
                     <div className="flex items-center justify-center gap-3 pt-2">
-                      <button
-                        onClick={() => setStep(1)}
-                        className="rounded-xl px-4 py-2 border border-gray-300 hover:border-black"
-                      >
+                      <Button variant="bordered" onPress={() => setStep(1)}>
                         Make Another Booking
-                      </button>
-                      <button
-                        onClick={resetAll}
-                        className="rounded-xl px-4 py-2 bg-black text-white hover:opacity-90"
-                      >
+                      </Button>
+                      <Button color="primary" onPress={resetAll}>
                         Start Over
-                      </button>
+                      </Button>
                     </div>
-                  </div>
+                  </CardBody>
                 </Card>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        <div className="mt-6 text-xs text-gray-500 space-y-1">
-          <p>Powered by the reservations public API.</p>
         </div>
       </div>
     </div>
