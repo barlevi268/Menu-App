@@ -90,6 +90,7 @@ type ReservationPreferences = {
 };
 
 type ReservationCompany = {
+  id?: string | null;
   name?: string | null;
   address?: string | null;
 };
@@ -231,7 +232,7 @@ export default function ReservationApp() {
       setError("");
       try {
         const url = new URL(`${baseUrl}/reservations/slots/vacant`);
-        url.searchParams.set("companyId", companyId);
+        url.searchParams.set("companyId", company?.id || companyId);
         url.searchParams.set("from", date);
         url.searchParams.set("to", date);
         url.searchParams.set("areaId", areaId);
@@ -444,14 +445,6 @@ export default function ReservationApp() {
                           ))}
                         </div>
                       )}
-                      {selectedArea?.timeAvailable ? (
-                        <p className="text-xs text-gray-500 mt-2">{selectedArea.timeAvailable}</p>
-                      ) : null}
-                      {slotDuration ? (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Each reservation is for {slotDuration} minutes.
-                        </p>
-                      ) : null}
                     </div>
 
                   <div className="flex items-center justify-between mt-6">

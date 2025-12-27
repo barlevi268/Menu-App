@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { HeroUIProvider } from "@heroui/react";
@@ -6,6 +6,27 @@ import "./index.css";
 import FormFillApp from "./forms/FormFillApp";
 import MenuApp from "./menu/MenuApp";
 import ReservationApp from "./reservations/ReservationApp";
+
+function GlobalInputSpaceFix() {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== " ") return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const isEditable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable;
+      if (!isEditable) return;
+      event.stopPropagation();
+    };
+
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
+  }, []);
+
+  return null;
+}
 
 function App() {
   return (
@@ -26,6 +47,7 @@ function App() {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <HeroUIProvider>
+      <GlobalInputSpaceFix />
       <BrowserRouter>
         <App />
       </BrowserRouter>
