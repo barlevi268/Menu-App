@@ -5,26 +5,21 @@ import {
   Card,
   CardBody,
   Chip,
-  DatePicker,
-  Input,
   RadioGroup,
+  SelectItem,
   VisuallyHidden,
   Spinner,
-  Textarea,
   cn,
   useRadio,
+  CardHeader,
+  CardFooter,
 } from "@heroui/react";
 import type { RadioProps } from "@heroui/react";
-import { parseDate } from "@internationalized/date";
+import { Input, Select, Textarea } from "../ui/heroui";
 
-type StepProps = {
-  n: number;
-  label: string;
-  active: boolean;
-  done: boolean;
-};
+type CustomRadioProps = RadioProps & { media?: React.ReactNode };
 
-const CustomRadio = (props: RadioProps) => {
+const CustomRadio = ({ media, ...props }: CustomRadioProps) => {
   const {
     Component,
     children,
@@ -41,23 +36,34 @@ const CustomRadio = (props: RadioProps) => {
     <Component
       {...getBaseProps({
         className: cn(
-          "group inline-flex items-center hover:opacity-70 active:opacity-50 justify-between flex-row-reverse tap-highlight-transparent m-0",
-          "w-full cursor-pointer border-2 border-default rounded-lg gap-4 p-3",
-          "data-[selected=true]:border-primary"
+          "group relative inline-flex w-full cursor-pointer select-none flex-col gap-3",
+          "rounded-2xl border-2 border-slate-200 bg-white p-3 text-center",
+          "transition-all hover:border-slate-300 hover:shadow-sm",
+          "data-[selected=true]:border-sky-500 data-[selected=true]:bg-sky-50 data-[selected=true]:shadow-md"
         ),
       })}
     >
       <VisuallyHidden>
         <input {...getInputProps()} />
       </VisuallyHidden>
-      <span {...getWrapperProps()}>
+      <span {...getWrapperProps()} className="sr-only">
         <span {...getControlProps()} />
       </span>
-      <div {...getLabelWrapperProps()}>
-        {children && <span {...getLabelProps()}>{children}</span>}
-        {description && (
-          <span className="text-small text-foreground opacity-70">{description}</span>
-        )}
+      <div {...getLabelWrapperProps()} className="ms-0 ml-0">
+        <div className="rounded-xl border border-slate-200 p-2 transition-colors group-data-[selected=true]:border-sky-500 group-data-[selected=true]:bg-sky-50">
+          {media}
+          {children && (
+            <span
+              {...getLabelProps()}
+              className="mt-2 block text-sm font-semibold text-slate-800 group-data-[selected=true]:text-sky-600"
+            >
+              {children}
+            </span>
+          )}
+          {description && (
+            <span className="block text-xs text-slate-500">{description}</span>
+          )}
+        </div>
       </div>
     </Component>
   );
@@ -100,20 +106,6 @@ type PreferencesResponse = {
   preferences?: ReservationPreferences | null;
   areas?: ReservationArea[] | null;
 };
-
-const Step = ({ n, label, active, done }: StepProps) => (
-  <div className={`flex items-center gap-3  ${!active && 'hidden'}`}>
-    <Chip
-      size="sm"
-      className={`justify-center font-semibold`}
-      color={done ? "success" : active ? "default" : "default"}
-      variant={done || active ? "solid" : "flat"}
-    >
-      {n}
-    </Chip>
-    <div className={"text-sm font-semibold"}>{active && label}</div>
-  </div>
-);
 
 const toMin = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -273,6 +265,25 @@ export default function ReservationApp() {
     return [...slots].sort((a, b) => toMin(a.time) - toMin(b.time));
   }, [slots]);
 
+  const dateOptions = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "2-digit",
+    });
+    return Array.from({ length: 60 }, (_, i) => {
+      const next = new Date();
+      next.setDate(next.getDate() + i);
+      const iso = next.toISOString().slice(0, 10);
+      return { value: iso, label: formatter.format(next) };
+    });
+  }, []);
+
+  const guestOptions = useMemo(
+    () => Array.from({ length: 19 }, (_, i) => String(i + 2)),
+    []
+  );
+
   const selectedArea = areas.find((area) => area.id === areaId);
   const maxPartySize = preferences?.maxPartySize ?? 20;
   const slotDuration = preferences?.slotDurationMinutes ?? null;
@@ -331,24 +342,16 @@ export default function ReservationApp() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-amber-50 to-emerald-50 text-gray-900">
+    <div className="min-h-screen w-full bg-gradient-to-b from-blue-50 to-cyan-50 text-gray-900">
       <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
-        <header className="mb-8 md:mb-10">
+        <header className="mb-4 md:mb-6">
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Table Reservation</h1>
           <p className="text-gray-600 mt-2">
             {company?.name ? `Reserve at ${company.name}.` : "Choose your date, area, and time."}
           </p>
         </header>
 
-        <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
-          <CardBody className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            <Step n={1} label="Choose Date / Area / Time" active={step === 1} done={step > 1} />
-            <Step n={2} label="Your Details" active={step === 2} done={step > 2} />
-            <Step n={3} label="Confirmed" active={step === 3} done={false} />
-          </CardBody>
-        </Card>
-
-        <div className="mt-6">
+        <div>
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div
@@ -359,24 +362,43 @@ export default function ReservationApp() {
                 transition={{ duration: 0.2 }}
               >
                 <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+                  <CardHeader className="pt-5">
+                    <Chip color="primary" variant="flat" size="lg" className="mr-3">1</Chip><h2 className="text-xl font-extrabold text-gray-700">Reservation Date</h2>
+                  </CardHeader>
                   <CardBody className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <DatePicker
-                        label="Date"
-                        value={date ? parseDate(date) : null}
-                        minValue={parseDate(todayISO)}
-                        onChange={(next) => setDate(next ? next.toString() : todayISO)}
-                      />
 
-                      <Input
+                    <div className="space-y-4">
+                      <Select
+                        label="Date"
+                        size="lg"
+                        selectedKeys={date ? new Set([date]) : new Set()}
+                        onSelectionChange={(keys) => {
+                          const next = keys === "all" ? "" : Array.from(keys)[0] || "";
+                          if (next) setDate(next);
+                        }}
+                      >
+                        {dateOptions.map((option) => (
+                          <SelectItem key={option.value}>{option.label}</SelectItem>
+                        ))}
+                      </Select>
+
+                      <Select
                         label="Guests"
-                        type="number"
-                        min={1}
-                        max={maxPartySize}
-                        value={String(pax)}
-                        onValueChange={(next) => setPax(Number(next))}
+                        size="lg"
+                        selectedKeys={new Set([String(pax)])}
+                        onSelectionChange={(keys) => {
+                          const next = keys === "all" ? "" : Array.from(keys)[0] || "";
+                          const parsed = Number(next);
+                          if (!Number.isNaN(parsed)) setPax(parsed);
+                        }}
                         description={`Max party size: ${maxPartySize}`}
-                      />
+                      >
+                        {guestOptions
+                          .filter((count) => Number(count) <= maxPartySize)
+                          .map((count) => (
+                            <SelectItem key={count}>{count}</SelectItem>
+                          ))}
+                      </Select>
 
                       <div>
                         <div className="text-sm font-medium text-gray-700 mb-2">Area</div>
@@ -391,18 +413,29 @@ export default function ReservationApp() {
                           <RadioGroup
                             value={areaId}
                             onValueChange={setAreaId}
-                            classNames={{ wrapper: "grid grid-cols-2 gap-2" }}
+                            classNames={{ wrapper: "grid grid-cols-2 gap-4" }}
                           >
                             {areas.map((area) => (
                               <CustomRadio
                                 key={area.id}
                                 value={area.id}
+                                media={
+                                  area.photoUrl ? (
+                                    <img
+                                      src={area.photoUrl}
+                                      alt={area.name}
+                                      className="aspect-[4/3] w-full rounded-xl object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-slate-200 to-slate-100" />
+                                  )
+                                }
                                 description={
-                                  area.timeAvailable ||
                                   (area.slots ? `Up to ${area.slots} seats` : "See availability")
                                 }
                               >
-                                <span className="text-sm font-semibold">{area.name}</span>
+                                {area.name}
                               </CustomRadio>
                             ))}
                           </RadioGroup>
@@ -434,7 +467,7 @@ export default function ReservationApp() {
                               key={slot.id}
                               size="md"
                               variant={selectedSlotId === slot.id ? "solid" : "bordered"}
-                              color={selectedSlotId === slot.id ? "success" : "default"}
+                              color={selectedSlotId === slot.id ? "primary" : "default"}
                               onPress={() => {
                                 setTime(slot.time);
                                 setSelectedSlotId(slot.id);
@@ -446,23 +479,27 @@ export default function ReservationApp() {
                         </div>
                       )}
                     </div>
-
-                  <div className="flex items-center justify-between mt-6">
-                    <div className="text-sm text-gray-600">
-                      Selected: {date} / {selectedArea?.name ?? "-"} / {time || "-"} / {pax} guest{
-                        pax > 1 ? "s" : ""
-                      }
-                    </div>
-                    <Button
-                      color="primary"
-                      isDisabled={!canContinueStep1}
-                      onPress={() => setStep(2)}
-                    >
-                      Continue
-                    </Button>
-                  </div>
                   </CardBody>
+                  <CardFooter>
+                    <div className="w-full flex items-center justify-between mt-6">
+                      <div></div>
+                      {/* <div className="text-sm text-gray-600">
+                        Selected: {date} / {selectedArea?.name ?? "-"} / {time || "-"} / {pax} guest{
+                          pax > 1 ? "s" : ""
+                        }
+                      </div> */}
+                      <Button
+                        color="primary"
+                        isDisabled={!canContinueStep1}
+                        onPress={() => setStep(2)}
+                        size="lg"
+                      >
+                        Continue
+                      </Button>
+                    </div>
+                  </CardFooter>
                 </Card>
+
               </motion.div>
             )}
 
@@ -511,9 +548,9 @@ export default function ReservationApp() {
                       />
                       <Card className="mt-4 bg-amber-50 border border-amber-200">
                         <CardBody className="text-sm">
-                        <strong>Summary:</strong> {date} / {selectedArea?.name ?? "-"} / {time} / {pax} guest{
-                          pax > 1 ? "s" : ""
-                        }
+                          <strong>Summary:</strong> {date} / {selectedArea?.name ?? "-"} / {time} / {pax} guest{
+                            pax > 1 ? "s" : ""
+                          }
                         </CardBody>
                       </Card>
                     </div>
@@ -559,24 +596,24 @@ export default function ReservationApp() {
 
                     <Card className="text-left max-w-xl mx-auto bg-gray-50 border border-gray-200">
                       <CardBody className="p-4">
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="text-gray-500">Name</div>
-                        <div className="font-semibold">{name || "-"}</div>
-                        <div className="text-gray-500">Mobile</div>
-                        <div className="font-semibold">{phone || "-"}</div>
-                        <div className="text-gray-500">Email</div>
-                        <div className="font-semibold">{email || "-"}</div>
-                        <div className="text-gray-500">Date</div>
-                        <div className="font-semibold">{date}</div>
-                        <div className="text-gray-500">Time</div>
-                        <div className="font-semibold">{time}</div>
-                        <div className="text-gray-500">Area</div>
-                        <div className="font-semibold">{selectedArea?.name ?? "-"}</div>
-                        <div className="text-gray-500">Guests</div>
-                        <div className="font-semibold">{pax}</div>
-                        <div className="text-gray-500">Notes</div>
-                        <div className="font-semibold whitespace-pre-wrap">{notes || "-"}</div>
-                      </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="text-gray-500">Name</div>
+                          <div className="font-semibold">{name || "-"}</div>
+                          <div className="text-gray-500">Mobile</div>
+                          <div className="font-semibold">{phone || "-"}</div>
+                          <div className="text-gray-500">Email</div>
+                          <div className="font-semibold">{email || "-"}</div>
+                          <div className="text-gray-500">Date</div>
+                          <div className="font-semibold">{date}</div>
+                          <div className="text-gray-500">Time</div>
+                          <div className="font-semibold">{time}</div>
+                          <div className="text-gray-500">Area</div>
+                          <div className="font-semibold">{selectedArea?.name ?? "-"}</div>
+                          <div className="text-gray-500">Guests</div>
+                          <div className="font-semibold">{pax}</div>
+                          <div className="text-gray-500">Notes</div>
+                          <div className="font-semibold whitespace-pre-wrap">{notes || "-"}</div>
+                        </div>
                       </CardBody>
                     </Card>
 
