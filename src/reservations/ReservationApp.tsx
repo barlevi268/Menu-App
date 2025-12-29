@@ -93,6 +93,7 @@ type ReservationPreferences = {
   maxPartySize?: number | null;
   confirmationRequired?: boolean | null;
   externalSlug?: string | null;
+  preConfirmationNotes?: string | null;
 };
 
 type ReservationCompany = {
@@ -333,7 +334,7 @@ export default function ReservationApp() {
         const message = await res.text();
         throw new Error(message || `Failed to submit reservation: ${res.status}`);
       }
-      setStep(3);
+      setStep(4);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to submit reservation.");
     } finally {
@@ -378,7 +379,13 @@ export default function ReservationApp() {
                         }}
                       >
                         {dateOptions.map((option) => (
-                          <SelectItem key={option.value}>{option.label}</SelectItem>
+                          <SelectItem key={option.value} textValue={option.value}>
+                                <div className="flex gap-2 items-center">
+                                  
+                                    <span className="text-medium">{option.label}</span>
+                                  
+                                </div>
+                          </SelectItem>
                         ))}
                       </Select>
 
@@ -396,7 +403,13 @@ export default function ReservationApp() {
                         {guestOptions
                           .filter((count) => Number(count) <= maxPartySize)
                           .map((count) => (
-                            <SelectItem key={count}>{count}</SelectItem>
+                            <SelectItem key={count} textValue={count}>
+                                <div className="flex gap-2 items-cente p-1">
+                                  <div className="flex flex-col">
+                                    <span className="text-medium">{count}</span>
+                                  </div>
+                                </div>
+                            </SelectItem>
                           ))}
                       </Select>
 
@@ -563,10 +576,9 @@ export default function ReservationApp() {
                     <Button
                       color="primary"
                       isDisabled={!canConfirm}
-                      isLoading={submitting}
-                      onPress={handleConfirm}
+                      onPress={() => setStep(3)}
                     >
-                      Confirm Reservation
+                      Review Reservation
                     </Button>
                   </div>
 
@@ -578,6 +590,92 @@ export default function ReservationApp() {
             {step === 3 && (
               <motion.div
                 key="step3"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
+                  <CardHeader className="pt-5">
+                    <Chip color="primary" variant="flat" size="lg" className="mr-3">
+                      3
+                    </Chip>
+                    <h2 className="text-xl font-extrabold text-gray-700">Confirm Reservation</h2>
+                  </CardHeader>
+                  <CardBody className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <Card className="border border-slate-200 shadow-sm">
+                        <CardBody className="space-y-2 text-sm">
+                          <div className="text-gray-500">Reservation</div>
+                          <div className="text-base font-semibold text-gray-900">
+                            {date} • {time || "-"} • {pax} guest{pax > 1 ? "s" : ""}
+                          </div>
+                        </CardBody>
+                      </Card>
+
+                      <Card className="border border-slate-200 shadow-sm">
+                        <CardBody className="space-y-3 text-sm">
+                          <div className="text-gray-500">Area</div>
+                          {selectedArea?.photoUrl ? (
+                            <img
+                              src={selectedArea.photoUrl}
+                              alt={selectedArea.name ?? "Reservation area"}
+                              className="aspect-[4/3] w-full rounded-xl object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-slate-200 to-slate-100" />
+                          )}
+                          <div className="text-base font-semibold text-gray-900">
+                            {selectedArea?.name ?? "-"}
+                          </div>
+                        </CardBody>
+                      </Card>
+                    </div>
+
+                    <div className="space-y-4">
+                      {preferences?.preConfirmationNotes ? (
+                        <Card className="border border-sky-200 bg-sky-50/60 shadow-sm">
+                          <CardBody className="space-y-2 text-sm">
+                            <div className="text-sky-700 font-semibold">Please note</div>
+                            <div className="text-sky-800 whitespace-pre-wrap">
+                              {preferences.preConfirmationNotes}
+                            </div>
+                          </CardBody>
+                        </Card>
+                      ) : null}
+
+                      <Card className="border border-slate-200 shadow-sm">
+                        <CardBody className="space-y-2 text-sm">
+                          <div className="text-gray-500">Guest Details</div>
+                          <div className="font-semibold text-gray-900">{name || "-"}</div>
+                          <div className="text-gray-600">{phone || "-"}</div>
+                          {email ? <div className="text-gray-600">{email}</div> : null}
+                          {notes ? (
+                            <div className="text-gray-600 whitespace-pre-wrap">{notes}</div>
+                          ) : null}
+                        </CardBody>
+                      </Card>
+                    </div>
+                  </CardBody>
+
+                  <div className="flex items-center justify-between mt-6 p-3">
+                    <Button variant="bordered" onPress={() => setStep(2)}>
+                      Back
+                    </Button>
+                    <Button color="primary" isLoading={submitting} onPress={handleConfirm}>
+                      Confirm Reservation
+                    </Button>
+                  </div>
+
+                  {error && <div className="text-sm text-red-600 mt-3">{error}</div>}
+                </Card>
+              </motion.div>
+            )}
+
+            {step === 4 && (
+              <motion.div
+                key="step4"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
@@ -616,15 +714,6 @@ export default function ReservationApp() {
                         </div>
                       </CardBody>
                     </Card>
-
-                    <div className="flex items-center justify-center gap-3 pt-2">
-                      <Button variant="bordered" onPress={() => setStep(1)}>
-                        Make Another Booking
-                      </Button>
-                      <Button color="primary" onPress={resetAll}>
-                        Start Over
-                      </Button>
-                    </div>
                   </CardBody>
                 </Card>
               </motion.div>
