@@ -87,7 +87,26 @@ const ImageViewer = ({ src, visible, onClose }: { src: string; visible: boolean;
   );
 };
 
+const getCompanyIdFromPath = () => {
+  const params = new URLSearchParams(window.location.search);
+  const paramId =
+    params.get('companyId') ||
+    params.get('id');
+  
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  if (paramId) return paramId;
+  if (segments[0] === 'menu') {
+    return segments[1];
+  }
+  return segments[0];
+};
+
 const MenuApp = () => {
+  const baseUrl = React.useMemo(
+    () => import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co',
+    []
+  );
+  const [companyObject, setCompanyObject] = useState()
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
@@ -102,10 +121,12 @@ const MenuApp = () => {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [footerText, setFooterText] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
+  const menuViewedSentRef = React.useRef(false);
   // Track programmatic scroll and ordered categories
   const isAutoScrollingRef = React.useRef(false);
   const orderedCategoryIds = React.useMemo(
@@ -182,19 +203,39 @@ const MenuApp = () => {
     }
   }, [selectedCategory]);
 
-  const getCompanyIdFromPath = () => {
-    const params = new URLSearchParams(window.location.search);
-    const paramId =
-      params.get('companyId') ||
-      params.get('id');
-    
-    const segments = window.location.pathname.split('/').filter(Boolean);
-    if (paramId) return paramId;
-    if (segments[0] === 'menu') {
-      return segments[1];
+  const postPublicEvent = React.useCallback(async (payload: Record<string, unknown>) => {
+    try {
+      await fetch(`${baseUrl}/public/analytics/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn('Failed to post public analytics event:', error);
     }
-    return segments[0];
-  };
+  }, [baseUrl]);
+
+  const trackMenuViewed = React.useCallback((resolvedCompanyId: string | null) => {
+    if (!resolvedCompanyId || menuViewedSentRef.current) return;
+    menuViewedSentRef.current = true;
+    void postPublicEvent({
+      companyId: resolvedCompanyId,
+      publicEventType: 'customer-menu-viewed',
+      properties: { channel: 'web' },
+    });
+  }, [postPublicEvent]);
+
+  const trackItemViewed = React.useCallback((entityId?: string | null) => {
+    if (!companyId || !entityId) return;
+    void postPublicEvent({
+      companyId,
+      publicEventType: 'customer-menu-item-viewd',
+      entityId,
+    });
+  }, [companyId, postPublicEvent]);
 
   const normalizeValue = (value: unknown, fallback: string) => {
     if (typeof value === 'string') {
@@ -340,18 +381,9 @@ const MenuApp = () => {
       try {
         setIsLoading(true);
         setMenuError(false);
-        const companyId = getCompanyIdFromPath();
-        if (!companyId) {
-          setMenuError(true);
-          setProducts([]);
-          setMenuCategories([]);
-          setCategoryGroups([]);
-          setIsLoading(false);
-          return;
-        }
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co';
-        const path = companyId
-          ? `${baseUrl}/public/customer-menu/${companyId}`
+        const requestCompanyId = getCompanyIdFromPath();
+        const path = requestCompanyId
+          ? `${baseUrl}/public/customer-menu/${requestCompanyId}`
           : `${baseUrl}/public/customer-menu`;
         const res = await fetch(path, { headers: { Accept: 'application/json' } });
         if (!res.ok) {
@@ -363,12 +395,15 @@ const MenuApp = () => {
           throw new Error(`Expected JSON but received: ${bodyText.slice(0, 120)}...`);
         }
         const data = await res.json();
+        const resolvedCompanyId = data?.company?.id ?? null;
+        setCompanyId(resolvedCompanyId);
         setCompanyName(
           data?.company?.name ??
             data?.companyName ??
             data?.company_name ??
             null
         );
+        setCompanyObject(data?.company)
         const preferences = getPreferences(data);
         const rawItems = Array.isArray(data)
           ? data
@@ -394,16 +429,18 @@ const MenuApp = () => {
         if (preferences?.footerText !== undefined) {
           setFooterText(preferences.footerText ?? null);
         }
+        trackMenuViewed(resolvedCompanyId);
       } catch (error) {
         console.error('Failed to fetch products:', error);
         setMenuError(true);
         setProducts([]);
         setMenuCategories([]);
         setCategoryGroups([]);
+        setCompanyId(null);
       }
     };
     fetchProducts();
-  }, []);
+  }, [baseUrl, trackMenuViewed]);
 
   // Track image loading
   React.useEffect(() => {
@@ -446,40 +483,45 @@ const MenuApp = () => {
     setSelectedProduct(null);
   }
 
-  const ProductCard = ({ product }: { product: any }) => (
-    <div
-      className="relative bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
-      onClick={() => {
-        setSelectedProduct(product);
-        // show overlay
-        setDetailVisible(true);
-      }}
-    >
-      <div className="flex items-start p-3">
+  const ProductCard = ({ product }: { product: any }) => {
+    const productId = product?.$id ?? product?.id;
 
-        <div className="flex-1 min-w-0 justify-between flex flex-col">
-          <div className='pl-1'>
-            <h3 className="font-bold text-gray-800 truncate">{product.name}</h3>
-            <p className="text-gray-600 text-xs truncate-2">{product.description}</p>
-            <div className="absolute bottom-3 text-sm font-bold">
-              {buildDisplayPrice(product)}
+    return (
+      <div
+        className="relative bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
+        onClick={() => {
+          setSelectedProduct(product);
+          // show overlay
+          setDetailVisible(true);
+          trackItemViewed(productId);
+        }}
+      >
+        <div className="flex items-start p-3">
+
+          <div className="flex-1 min-w-0 justify-between flex flex-col">
+            <div className='pl-1'>
+              <h3 className="font-bold text-gray-800 truncate">{product.name}</h3>
+              <p className="text-gray-600 text-xs truncate-2">{product.description}</p>
+              <div className="absolute bottom-3 text-sm font-bold">
+                {buildDisplayPrice(product)}
+              </div>
             </div>
+
           </div>
-
+          {product.image ? (
+            <img
+              src={product.image}
+              alt={product.name || 'product image'}
+              className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
+                }`}
+            />
+          ) : (<div className="w-20 h-24 rounded-md flex-shrink-0 ml-3 overflow-hidden"></div>)}
         </div>
-        {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name || 'product image'}
-            className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
-              }`}
-          />
-        ) : (<div className="w-20 h-24 rounded-md flex-shrink-0 ml-3 overflow-hidden"></div>)}
+
+
       </div>
-
-
-    </div>
-  );
+    );
+  };
 
   const [activeGroup, setActiveGroup] = useState('');
 
