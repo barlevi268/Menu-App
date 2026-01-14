@@ -14,6 +14,7 @@ type MenuPreferences = {
   coverPhotoUrl?: string | null;
   logoUrl?: string | null;
   footerText?: string | null;
+  darkMode?: boolean;
 };
 type MenuItemRow = {
   price?: number | string;
@@ -123,6 +124,7 @@ const MenuApp = () => {
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+  const [darkMode, setDarkMode] = useState(false);
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
@@ -376,6 +378,15 @@ const MenuApp = () => {
     document.title = companyName ? `${companyName} Menu` : 'Menu';
   }, [companyName]);
 
+  // Handle dark mode toggle
+  React.useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
   React.useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -428,6 +439,9 @@ const MenuApp = () => {
         }
         if (preferences?.footerText !== undefined) {
           setFooterText(preferences.footerText ?? null);
+        }
+        if (preferences?.darkMode !== undefined) {
+          setDarkMode(preferences.darkMode);
         }
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
@@ -488,7 +502,7 @@ const MenuApp = () => {
 
     return (
       <div
-        className="relative bg-white rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
+        className="relative bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
         onClick={() => {
           setSelectedProduct(product);
           // show overlay
@@ -500,8 +514,8 @@ const MenuApp = () => {
 
           <div className="flex-1 min-w-0 justify-between flex flex-col">
             <div className='pl-1'>
-              <h3 className="font-bold text-gray-800 truncate">{product.name}</h3>
-              <p className="text-gray-600 text-xs truncate-2">{product.description}</p>
+              <h3 className="font-bold text-gray-800 dark:text-gray-100 truncate">{product.name}</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-xs truncate-2">{product.description}</p>
               <div className="absolute bottom-3 text-sm font-bold">
                 {buildDisplayPrice(product)}
               </div>
@@ -531,7 +545,7 @@ const MenuApp = () => {
   };
 
 
-  const activeTheme = themeClasses[themeColor as keyof typeof themeClasses] ?? themeClasses.amber;
+  const activeTheme = activeTheme[themeColor as keyof typeof themeClasses] ?? themeClasses.amber;
 
 
   // close overlay with Escape
@@ -548,10 +562,10 @@ const MenuApp = () => {
   }, [detailVisible]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-white dark:bg-gray-800 z-50 flex items-center justify-center">
           <div className="text-center">
             <div className={`w-16 h-16 border-4 ${activeTheme.border} border-t-transparent rounded-full animate-spin mb-4`}></div>
           </div>
@@ -570,14 +584,26 @@ const MenuApp = () => {
         style={coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
       >
         {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-30`} />}
+        {/* <div className="absolute top-4 right-4 z-20">
+          <div
+            className="p-2 rounded-full bg-white/20"
+            aria-label="Dark mode"
+          >
+            {darkMode ? (
+              <Coffee className="w-6 h-6 text-white" />
+            ) : (
+              <span className="text-white font-bold text-lg">☀️</span>
+            )}
+          </div>
+        </div> */}
         <div className="relative z-10 text-center">
           <img src={logoUrl || logoImgSrc} alt="Brand logo" className="max-w-32 mx-auto" />
         </div>
       </div>
 
       {/* Category Filter */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm ">
-        <div className="flex max-w-4xl mx-auto overflow-x-auto text-gray-600 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
+      <div className="bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm ">
+        <div className="flex max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
           {categoryGroups.map((group) => (
             <div
               key={group.id}
@@ -590,7 +616,7 @@ const MenuApp = () => {
               }}
               className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
                 ? activeTheme.groupActive
-                : 'text-gray-600 hover:bg-gray-200'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
             >
               {group.name}
@@ -611,7 +637,7 @@ const MenuApp = () => {
                 }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
                   ? activeTheme.chipActive
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
               >
                 <span className="font-medium">{category.name}</span>
@@ -625,7 +651,7 @@ const MenuApp = () => {
       <div className="p-4 md:px-8 flex-1">
         <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]">
           {menuError && !isLoading && (
-            <div className="text-center text-gray-600 font-semibold py-12">
+            <div className="text-center text-gray-600 dark:text-gray-400 font-semibold py-12">
               Menu not Found
             </div>
           )}
@@ -638,7 +664,7 @@ const MenuApp = () => {
                 <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mb-6">
                   <h2
                     ref={el => (categoryHeaderRefs.current[category.id] = el)}
-                    className="text-xl font-extrabold text-gray-700 mb-4 px-1 border-b pb-2"
+                    className="text-xl font-extrabold text-gray-700 dark:text-gray-200 mb-4 px-1 border-b dark:border-gray-700 pb-2"
                   >
                     {category.name}
                   </h2>
@@ -670,7 +696,7 @@ const MenuApp = () => {
             <motion.div
               role="dialog"
               aria-modal="true"
-              className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white rounded-t-2xl shadow-xl overflow-auto"
+              className="fixed max-w-[450px] left-0 right-0 top-12 bottom-0 mx-auto bg-white dark:bg-gray-800 rounded-t-2xl shadow-xl overflow-auto"
               initial={{ y: '100%', opacity: 0 }}
               animate={{ y: selectedProduct.image ? 0 : 288, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
@@ -693,9 +719,9 @@ const MenuApp = () => {
                   <button
                     onClick={closeDetailOverlay}
                     aria-label="Close"
-                    className="p-2 rounded-full bg-white shadow-sm hover:bg-gray-100 transition-colors shadow-lg"
+                    className="p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors shadow-lg"
                   >
-                    <X className="w-6 h-6 text-gray-700" />
+                    <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
                   </button>
                 </div>
               </div>
@@ -704,14 +730,14 @@ const MenuApp = () => {
               <div className="p-6 space-y-6 max-h-[60vh] overflow-auto">
                 {/* Description */}
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-800">{selectedProduct.name}</h1>
-                  <p className="text-gray-700 leading-relaxed">{selectedProduct.description}</p>
+                  <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{selectedProduct.name}</h1>
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedProduct.description}</p>
                   {Array.isArray(selectedProduct.options) && selectedProduct.options.length > 0 ? (
                     <div className="mt-4 space-y-1">
 
                       {selectedProduct.options.map((option: { name?: string; price?: number | string }, index: number) => (
-                        <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 border-b py-3 px-1">
-                          <span className="text-xs mr-2 text-gray-700">●</span>
+                        <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 py-3 px-1">
+                          <span className="text-xs mr-2 text-gray-700 dark:text-gray-400">●</span>
                           <span className="font-semibold">{option.name || 'Option'}</span>
                           <span className="mx-2">-</span>
                           <span>{buildDisplayPrice({ options: [option] })}</span>
