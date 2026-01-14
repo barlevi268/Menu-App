@@ -544,8 +544,55 @@ const MenuApp = () => {
     return group ? group.name : '';
   };
 
+  // Check if color is a hex value
+  const isHexColor = (color: string): boolean => /^#[0-9A-F]{6}$/i.test(color);
 
-  const activeTheme = activeTheme[themeColor as keyof typeof themeClasses] ?? themeClasses.amber;
+  // Generate theme from hex color with lighter/darker variants
+  const generateThemeFromHex = (hexColor: string) => {
+    const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      } : { r: 139, g: 69, b: 19 }; // fallback to amber
+    };
+
+    const rgbToHex = (r: number, g: number, b: number): string => {
+      return '#' + [r, g, b].map(x => {
+        const hex = x.toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+      }).join('');
+    };
+
+    const darken = (hex: string, percent: number): string => {
+      const rgb = hexToRgb(hex);
+      const factor = 1 - (percent / 100);
+      return rgbToHex(
+        Math.max(0, Math.round(rgb.r * factor)),
+        Math.max(0, Math.round(rgb.g * factor)),
+        Math.max(0, Math.round(rgb.b * factor))
+      );
+    };
+
+    const baseColor = hexColor.toUpperCase();
+    const darkerColor = darken(baseColor, 20);
+
+    return {
+      header: baseColor,
+      headerDarker: darkerColor,
+      accentBg: baseColor,
+      accentText: baseColor,
+      border: baseColor,
+      chipActive: baseColor,
+      groupActive: baseColor,
+      isCustom: true,
+    };
+  };
+
+  const activeTheme = isHexColor(themeColor) 
+    ? generateThemeFromHex(themeColor)
+    : (themeClasses[themeColor as keyof typeof themeClasses] ?? themeClasses.amber);
 
 
   // close overlay with Escape
@@ -567,7 +614,10 @@ const MenuApp = () => {
       {isLoading && (
         <div className="fixed inset-0 bg-white dark:bg-gray-800 z-50 flex items-center justify-center">
           <div className="text-center">
-            <div className={`w-16 h-16 border-4 ${activeTheme.border} border-t-transparent rounded-full animate-spin mb-4`}></div>
+            <div 
+              className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mb-4"
+              style={activeTheme.isCustom ? { borderColor: activeTheme.border, borderTopColor: 'transparent' } : { borderColor: activeTheme.border }}
+            ></div>
           </div>
         </div>
       )}
@@ -580,10 +630,21 @@ const MenuApp = () => {
       )}
       {/* Header */}
       <div
-        className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : `bg-gradient-to-r ${activeTheme.header}`}`}
-        style={coverPhotoUrl ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+        className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : (activeTheme.isCustom ? '' : `bg-gradient-to-r ${activeTheme.header}`)}`}
+        style={
+          activeTheme.isCustom && !coverPhotoUrl 
+            ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` }
+            : coverPhotoUrl 
+            ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : undefined
+        }
       >
-        {coverPhotoUrl && <div className={`absolute inset-0 bg-gradient-to-r ${activeTheme.header} opacity-30`} />}
+        {coverPhotoUrl && (
+          <div 
+            className="absolute inset-0 opacity-30"
+            style={activeTheme.isCustom ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` } : {}}
+          />
+        )}
         {/* <div className="absolute top-4 right-4 z-20">
           <div
             className="p-2 rounded-full bg-white/20"
@@ -604,27 +665,33 @@ const MenuApp = () => {
       {/* Category Filter */}
       <div className="bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm ">
         <div className="flex max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
-          {categoryGroups.map((group) => (
-            <div
-              key={group.id}
-              onClick={() => {
-                const firstCategory = group.categories[0];
-                setSelectedCategory(firstCategory);
-                // active group will update on scroll
-                categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                scrollToCategoryHeader(firstCategory);
-              }}
-              className={`cursor-pointer px-2 py-1 rounded-md transition-colors ${getGroupFromCategory(selectedCategory) === group.name
-                ? activeTheme.groupActive
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+          {categoryGroups.map((group) => {
+            const isGroupActive = getGroupFromCategory(selectedCategory) === group.name;
+            return (
+              <div
+                key={group.id}
+                onClick={() => {
+                  const firstCategory = group.categories[0];
+                  setSelectedCategory(firstCategory);
+                  // active group will update on scroll
+                  categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                  scrollToCategoryHeader(firstCategory);
+                }}
+                className={`cursor-pointer px-2 py-1 rounded-md transition-colors text-white ${
+                  isGroupActive
+                    ? (activeTheme.isCustom ? '' : activeTheme.groupActive)
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 bg-transparent'
                 }`}
-            >
-              {group.name}
-            </div>
-          ))}
+                style={isGroupActive && activeTheme.isCustom ? { backgroundColor: activeTheme.groupActive } : undefined}
+              >
+                {group.name}
+              </div>
+            );
+          })}
         </div>
         <div className="flex max-w-4xl mx-auto overflow-x-auto p-4 space-x-3 scrollbar-hide">
           {menuCategories.map((category) => {
+            const isActive = selectedCategory === category.id;
             return (
               <button
                 key={category.id}
@@ -635,10 +702,12 @@ const MenuApp = () => {
                   categoryButtonRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                   scrollToCategoryHeader(category.id);
                 }}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${selectedCategory === category.id
-                  ? activeTheme.chipActive
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-white shadow-md ${
+                  isActive
+                    ? (activeTheme.isCustom ? '' : activeTheme.chipActive)
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 shadow-none'
+                }`}
+                style={isActive && activeTheme.isCustom ? { backgroundColor: activeTheme.chipActive } : undefined}
               >
                 <span className="font-medium">{category.name}</span>
               </button>
