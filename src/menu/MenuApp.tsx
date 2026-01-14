@@ -269,9 +269,9 @@ const MenuApp = () => {
         return '₱0.00';
       }
       // if there are two options separate with slash instead of dash
-      if (prices.length === 2) {
-        return `${formatPrice(prices[0])} / ${formatPrice(prices[1])}`;
-      }
+      // if (prices.length === 2) {
+      //   return `${formatPrice(prices[0])} / ${formatPrice(prices[1])}`;
+      // }
       const minPrice = Math.min(...prices);
       const maxPrice = Math.max(...prices);
       if (minPrice === maxPrice) {
