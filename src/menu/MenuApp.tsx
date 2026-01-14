@@ -595,7 +595,8 @@ const MenuApp = () => {
     };
   };
 
-  const activeTheme = isHexColor(themeColor) 
+  const isCustomColor = isHexColor(themeColor);
+  const activeTheme: any = isCustomColor
     ? generateThemeFromHex(themeColor)
     : (themeClasses[themeColor as keyof typeof themeClasses] ?? themeClasses.amber);
 
@@ -621,7 +622,7 @@ const MenuApp = () => {
           <div className="text-center">
             <div 
               className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mb-4"
-              style={activeTheme.isCustom ? { borderColor: activeTheme.border, borderTopColor: 'transparent' } : { borderColor: activeTheme.border }}
+              style={isCustomColor ? { borderColor: activeTheme.border, borderTopColor: 'transparent' } : { borderColor: activeTheme.border }}
             ></div>
           </div>
         </div>
@@ -635,9 +636,9 @@ const MenuApp = () => {
       )}
       {/* Header */}
       <div
-        className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : (activeTheme.isCustom ? '' : `bg-gradient-to-r ${activeTheme.header}`)}`}
+        className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : (isCustomColor ? '' : `bg-gradient-to-r ${activeTheme.header}`)}`}
         style={
-          activeTheme.isCustom && !coverPhotoUrl 
+          isCustomColor && !coverPhotoUrl 
             ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` }
             : coverPhotoUrl 
             ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -647,7 +648,7 @@ const MenuApp = () => {
         {coverPhotoUrl && (
           <div 
             className="absolute inset-0 opacity-30"
-            style={activeTheme.isCustom ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` } : {}}
+            style={isCustomColor ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` } : {}}
           />
         )}
         {/* <div className="absolute top-4 right-4 z-20">
@@ -684,10 +685,10 @@ const MenuApp = () => {
                 }}
                 className={`cursor-pointer px-2 py-1 rounded-md transition-colors text-white ${
                   isGroupActive
-                    ? (activeTheme.isCustom ? '' : activeTheme.groupActive)
+                    ? (isCustomColor ? '' : activeTheme.groupActive)
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 bg-transparent'
                 }`}
-                style={isGroupActive && activeTheme.isCustom ? { backgroundColor: activeTheme.groupActive } : undefined}
+                style={isGroupActive && isCustomColor ? { backgroundColor: activeTheme.groupActive } : undefined}
               >
                 {group.name}
               </div>
@@ -709,10 +710,10 @@ const MenuApp = () => {
                 }}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-white shadow-md ${
                   isActive
-                    ? (activeTheme.isCustom ? '' : activeTheme.chipActive)
+                    ? (isCustomColor ? '' : activeTheme.chipActive)
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 shadow-none'
                 }`}
-                style={isActive && activeTheme.isCustom ? { backgroundColor: activeTheme.chipActive } : undefined}
+                style={isActive && isCustomColor ? { backgroundColor: activeTheme.chipActive } : undefined}
               >
                 <span className="font-medium">{category.name}</span>
               </button>
@@ -826,7 +827,7 @@ const MenuApp = () => {
                             <div className="space-y-2">
                               <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Choose Type:</label>
                               <div className="flex flex-wrap gap-2">
-                                {variants.map((variant: string) => (
+                                {(variants as string[]).map((variant: string) => (
                                   <button
                                     key={variant}
                                     onClick={() => setSelectedVariant(variant)}
@@ -838,7 +839,7 @@ const MenuApp = () => {
                                         : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                                     }`}
                                     style={
-                                      selectedVariant === variant && ('isCustom' in activeTheme && activeTheme.isCustom)
+                                      selectedVariant === variant && isCustomColor
                                         ? { backgroundColor: (activeTheme as any).chipActive }
                                         : undefined
                                     }
