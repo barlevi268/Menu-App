@@ -125,6 +125,7 @@ const MenuApp = () => {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [darkMode, setDarkMode] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
@@ -495,6 +496,7 @@ const MenuApp = () => {
   const closeDetailOverlay = () => {
     setDetailVisible(false);
     setSelectedProduct(null);
+    setSelectedVariant(null);
   }
 
   const ProductCard = ({ product }: { product: any }) => {
@@ -508,6 +510,9 @@ const MenuApp = () => {
           // show overlay
           setDetailVisible(true);
           trackItemViewed(productId);
+          // Set first variant as selected
+          const firstVariant = product.options?.[0]?.variant;
+          setSelectedVariant(firstVariant || null);
         }}
       >
         <div className="flex items-start p-3">
@@ -801,18 +806,75 @@ const MenuApp = () => {
                 <div>
                   <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{selectedProduct.name}</h1>
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedProduct.description}</p>
+                  
                   {Array.isArray(selectedProduct.options) && selectedProduct.options.length > 0 ? (
-                    <div className="mt-4 space-y-1">
+                    <>
+                      {/* Get unique variants */}
+                      {(() => {
+                        const variants = Array.from(new Set(
+                          selectedProduct.options
+                            .map((opt: any) => opt.variant)
+                            .filter((v: any): v is string => Boolean(v))
+                        ));
+                        const filteredOptions = selectedVariant 
+                          ? selectedProduct.options.filter((opt: any) => opt.variant === selectedVariant)
+                          : selectedProduct.options;
 
-                      {selectedProduct.options.map((option: { name?: string; price?: number | string }, index: number) => (
-                        <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 py-3 px-1">
-                          <span className="text-xs mr-2 text-gray-700 dark:text-gray-400">●</span>
-                          <span className="font-semibold">{option.name || 'Option'}</span>
-                          <span className="mx-2">-</span>
-                          <span>{buildDisplayPrice({ options: [option] })}</span>
-                        </div>
-                      ))}
-                    </div>
+                        return variants.length > 0 ? (
+                          <div className="mt-4 space-y-4">
+                            {/* Variant Selector */}
+                            <div className="space-y-2">
+                              <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Choose Type:</label>
+                              <div className="flex flex-wrap gap-2">
+                                {variants.map((variant: string) => (
+                                  <button
+                                    key={variant}
+                                    onClick={() => setSelectedVariant(variant)}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                      selectedVariant === variant
+                                        ? ('isCustom' in activeTheme && activeTheme.isCustom)
+                                          ? 'text-white'
+                                          : (activeTheme as any).chipActive
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                    }`}
+                                    style={
+                                      selectedVariant === variant && ('isCustom' in activeTheme && activeTheme.isCustom)
+                                        ? { backgroundColor: (activeTheme as any).chipActive }
+                                        : undefined
+                                    }
+                                  >
+                                    {variant}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Options for selected variant */}
+                            <div className="space-y-1 border-t dark:border-gray-700 pt-4">
+                              {filteredOptions.map((option: { name?: string; price?: number | string }, index: number) => (
+                                <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 py-3 px-1">
+                                  <span className="text-xs mr-2 text-gray-700 dark:text-gray-400">●</span>
+                                  <span className="font-semibold">{option.name || 'Option'}</span>
+                                  <span className="mx-2">-</span>
+                                  <span>{buildDisplayPrice({ options: [option] })}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-4 space-y-1">
+                            {selectedProduct.options.map((option: { name?: string; price?: number | string }, index: number) => (
+                              <div key={`${option.name ?? 'option'}-${index}`} className="flex flex-row items-center text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 py-3 px-1">
+                                <span className="text-xs mr-2 text-gray-700 dark:text-gray-400">●</span>
+                                <span className="font-semibold">{option.name || 'Option'}</span>
+                                <span className="mx-2">-</span>
+                                <span>{buildDisplayPrice({ options: [option] })}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
                   ) : (
                     <div className={`${activeTheme.accentText} mb-4`}>
                       {buildDisplayPrice(selectedProduct)}
@@ -826,10 +888,10 @@ const MenuApp = () => {
       </AnimatePresence>
 
       {/* Footer */}
-      <div className="bg-white border-t p-6 mt-8">
-        <div className="text-center text-gray-600">
+      <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-6 mt-8">
+        <div className="text-center text-gray-600 dark:text-gray-400">
           <p className="text-sm">{footerText || 'Thank you for choosing Oltre ☺️'}</p>
-          {!footerText && <p className="text-xs text-gray-500 mt-1">Beyond coffee, made with passion</p>}
+          {!footerText && <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Beyond coffee, made with passion</p>}
         </div>
       </div>
     </div>
