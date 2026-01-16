@@ -16,6 +16,7 @@ type MenuPreferences = {
   footerText?: string | null;
   darkMode?: boolean;
   showPriceRange?: boolean;
+  expandOptions?: boolean;
 };
 type MenuItemRow = {
   price?: number | string;
@@ -127,6 +128,7 @@ const MenuApp = () => {
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [darkMode, setDarkMode] = useState(false);
   const [showPriceRange, setShowPriceRange] = useState(true);
+  const [expandOptions, setExpandOptions] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
@@ -472,6 +474,9 @@ const MenuApp = () => {
         if (preferences?.showPriceRange !== undefined) {
           setShowPriceRange(preferences.showPriceRange);
         }
+        if (preferences?.expandOptions !== undefined) {
+          setExpandOptions(preferences.expandOptions);
+        }
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
         console.error('Failed to fetch products:', error);
@@ -549,9 +554,37 @@ const MenuApp = () => {
             <div className='pl-1'>
               <h3 className="font-bold text-gray-800 dark:text-gray-100 truncate">{product.name}</h3>
               <p className="text-gray-600 dark:text-gray-400 text-xs truncate-2">{product.description}</p>
-              <div className="absolute bottom-3 text-sm font-bold">
-                {buildDisplayPrice(product, showPriceRange)}
-              </div>
+              {expandOptions && Array.isArray(product.options) && product.options.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {(() => {
+                    // Group options by variant
+                    const variantGroups = new Map<string, typeof product.options>();
+                    product.options.forEach((option: any) => {
+                      const variant = option.variant || null;
+                      if (!variantGroups.has(variant)) {
+                        variantGroups.set(variant, []);
+                      }
+                      variantGroups.get(variant)?.push(option);
+                    });
+
+                    return Array.from(variantGroups.entries()).map(([variant, options]) => (
+                      <div key={variant} className="space-y-1">
+                        <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">{variant}</div>
+                        {options.map((option: { name?: string; price?: number | string }, index: number) => (
+                          <div key={`${variant}-${option.name ?? 'option'}-${index}`} className="text-xs text-gray-700 dark:text-gray-300 flex justify-between pl-2">
+                            <span>{option.name?.replace(" Bottle","").replace(" Shot","") || 'Option'}</span>
+                            <span className="font-semibold">{buildDisplayPrice({ options: [option] })}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              ) : (
+                <div className=" bottom-3 text-sm font-bold">
+                  {buildDisplayPrice(product, showPriceRange)}
+                </div>
+              )}
             </div>
 
           </div>
@@ -562,7 +595,7 @@ const MenuApp = () => {
               className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
                 }`}
             />
-          ) : (<div className="w-20 h-24 rounded-md flex-shrink-0 ml-3 overflow-hidden"></div>)}
+          ) : null}
         </div>
 
 
