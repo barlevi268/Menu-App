@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Coffee, X } from 'lucide-react';
+import { Coffee, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import themeClasses from './themeClasses';
 
 const logoImgSrc = 'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin'
 
 type MenuCategory = { id: string; name: string };
-type CategoryGroup = { id: string; name: string; categories: string[] };
+type CategoryGroup = { id: string; name: string; categories: string[]; type?: string; images?: string[] };
 type MenuPreferences = {
-  menuTypes?: Record<string, { name?: string; categorieArrangment?: Record<string, number | string> }>;
+  menuTypes?: Record<string, { name?: string; type?: string; images?: string[]; categorieArrangment?: Record<string, number | string> }>;
   categories?: Record<string, { id: number | string; label?: string }>;
   themeColor?: string;
   coverPhotoUrl?: string | null;
@@ -126,6 +126,9 @@ const MenuApp = () => {
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [darkMode, setDarkMode] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
+  const [galleryImageIndex, setGalleryImageIndex] = useState(0);
+  const [galleryImageViewerVisible, setGalleryImageViewerVisible] = useState(false);
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
@@ -331,6 +334,20 @@ const MenuApp = () => {
 
       sortNumericKeys(prefMenuTypes).forEach((menuTypeKey) => {
         const menuType = prefMenuTypes[menuTypeKey];
+        const groupName = formatLabel(normalizeValue(menuType?.name, 'menu'));
+        
+        // Check if this is a gallery type
+        if (menuType?.type === 'gallery' && Array.isArray(menuType?.images)) {
+          orderedGroups.push({
+            id: menuTypeKey,
+            name: groupName,
+            categories: [],
+            type: 'gallery',
+            images: menuType.images,
+          });
+          return;
+        }
+        
         const arrangement = menuType?.categorieArrangment ?? {};
         const groupCategories: string[] = [];
         sortNumericKeys(arrangement).forEach((arrKey) => {
@@ -345,7 +362,7 @@ const MenuApp = () => {
         if (groupCategories.length > 0) {
           orderedGroups.push({
             id: menuTypeKey,
-            name: formatLabel(normalizeValue(menuType?.name, 'menu')),
+            name: groupName,
             categories: groupCategories,
           });
         }
@@ -670,20 +687,26 @@ const MenuApp = () => {
 
       {/* Category Filter */}
       <div className="bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm ">
-        <div className="flex max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide">
+        <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
           {categoryGroups.map((group) => {
-            const isGroupActive = getGroupFromCategory(selectedCategory) === group.name;
+            const isGroupActive = getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
             return (
               <div
                 key={group.id}
                 onClick={() => {
-                  const firstCategory = group.categories[0];
-                  setSelectedCategory(firstCategory);
-                  // active group will update on scroll
-                  categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                  scrollToCategoryHeader(firstCategory);
+                  if (group.type === 'gallery' && group.images) {
+                    setSelectedGallery({ name: group.name, images: group.images });
+                    setGalleryImageIndex(0);
+                  } else {
+                    const firstCategory = group.categories[0];
+                    setSelectedCategory(firstCategory);
+                    setSelectedGallery(null);
+                    // active group will update on scroll
+                    categoryButtonRefs.current[firstCategory]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    scrollToCategoryHeader(firstCategory);
+                  }
                 }}
-                className={`cursor-pointer px-2 py-1 rounded-md transition-colors text-white ${
+                className={`flex-shrink-0 whitespace-nowrap cursor-pointer px-2 py-1 rounded-md transition-colors text-white ${
                   isGroupActive
                     ? (isCustomColor ? '' : activeTheme.groupActive)
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 bg-transparent'
@@ -882,6 +905,133 @@ const MenuApp = () => {
                     </div>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Gallery Image Viewer */}
+      {selectedGallery && (
+        <ImageViewer
+          src={selectedGallery.images[galleryImageIndex]}
+          visible={galleryImageViewerVisible}
+          onClose={() => setGalleryImageViewerVisible(false)}
+        />
+      )}
+
+      {/* Gallery Modal */}
+      <AnimatePresence mode="wait">
+        {selectedGallery && (
+          <div className="fixed inset-0 z-50" aria-hidden={!selectedGallery}>
+            {/* backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.20 }}
+              onClick={() => setSelectedGallery(null)}
+            />
+
+            {/* Gallery Modal */}
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              className="fixed max-w-2xl left-0 right-0 top-1/2 bottom-auto mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden p-4"
+              initial={{ y: '100%', opacity: 0, scale: 0.9 }}
+              animate={{ y: '-50%', opacity: 1, scale: 1 }}
+              exit={{ y: '100%', opacity: 0, scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 240, damping: 25 }}
+            >
+              {/* Close Button */}
+              <div className="absolute top-4 right-4 z-20">
+                <button
+                  onClick={() => setSelectedGallery(null)}
+                  aria-label="Close"
+                  className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                </button>
+              </div>
+
+              {/* Gallery Content */}
+              <div className="space-y-4">
+                {/* Title */}
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 text-center mb-4">
+                  {selectedGallery.name}
+                </h2>
+
+                {/* Main Image */}
+                <div className="relative w-full h-100 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden group">
+                  <img
+                    src={selectedGallery.images[galleryImageIndex]}
+                    alt={`Gallery ${galleryImageIndex + 1}`}
+                    className="w-full h-full object-contain cursor-zoom-in"
+                    onClick={() => setGalleryImageViewerVisible(true)}
+                  />
+                  
+                  {/* Previous Button */}
+                  <button
+                    onClick={() =>
+                      setGalleryImageIndex(
+                        galleryImageIndex === 0
+                          ? selectedGallery.images.length - 1
+                          : galleryImageIndex - 1
+                      )
+                    }
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-white" />
+                  </button>
+
+                  {/* Next Button */}
+                  <button
+                    onClick={() =>
+                      setGalleryImageIndex(
+                        (galleryImageIndex + 1) % selectedGallery.images.length
+                      )
+                    }
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
+                  >
+                    <ChevronRight className="w-6 h-6 text-white" />
+                  </button>
+                </div>
+
+                {/* Image Counter */}
+                <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+                  {galleryImageIndex + 1} / {selectedGallery.images.length}
+                </div>
+
+                {/* Thumbnail Strip */}
+                {selectedGallery.images.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {selectedGallery.images.map((image, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setGalleryImageIndex(index)}
+                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                          index === galleryImageIndex
+                            ? `border-gray-800 dark:border-gray-200 ${
+                                isCustomColor ? '' : `${activeTheme.border}`
+                              }`
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                        style={
+                          index === galleryImageIndex && isCustomColor
+                            ? { borderColor: activeTheme.border }
+                            : undefined
+                        }
+                      >
+                        <img
+                          src={image}
+                          alt={`Thumbnail ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
