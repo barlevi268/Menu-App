@@ -15,6 +15,7 @@ type MenuPreferences = {
   logoUrl?: string | null;
   footerText?: string | null;
   darkMode?: boolean;
+  showPriceRange?: boolean;
 };
 type MenuItemRow = {
   price?: number | string;
@@ -125,13 +126,16 @@ const MenuApp = () => {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [darkMode, setDarkMode] = useState(false);
+  const [showPriceRange, setShowPriceRange] = useState(true);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
   const [galleryImageViewerVisible, setGalleryImageViewerVisible] = useState(false);
+  const [galleryDragOffset, setGalleryDragOffset] = useState(0);
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
+  const galleryTouchStartRef = React.useRef<number | null>(null);
   const menuViewedSentRef = React.useRef(false);
   // Track programmatic scroll and ordered categories
   const isAutoScrollingRef = React.useRef(false);
@@ -260,12 +264,16 @@ const MenuApp = () => {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-  const buildDisplayPrice = (row: MenuItemRow) => {
+  const buildDisplayPrice = (row: MenuItemRow, displayRange: boolean = true) => {
     const formatPrice = (price: number) => `₱${new Intl.NumberFormat('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(price)}`;
     if (Array.isArray(row.options) && row.options.length > 0) {
+      // If showPriceRange is false, return blank for items with options
+      if (!displayRange) {
+        return '';
+      }
       const prices = row.options
         .map((opt) =>
           typeof opt.price === 'number' ? opt.price : parseFloat(String(opt.price || 0))
@@ -461,6 +469,9 @@ const MenuApp = () => {
         if (preferences?.darkMode !== undefined) {
           setDarkMode(preferences.darkMode);
         }
+        if (preferences?.showPriceRange !== undefined) {
+          setShowPriceRange(preferences.showPriceRange);
+        }
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
         console.error('Failed to fetch products:', error);
@@ -539,7 +550,7 @@ const MenuApp = () => {
               <h3 className="font-bold text-gray-800 dark:text-gray-100 truncate">{product.name}</h3>
               <p className="text-gray-600 dark:text-gray-400 text-xs truncate-2">{product.description}</p>
               <div className="absolute bottom-3 text-sm font-bold">
-                {buildDisplayPrice(product)}
+                {buildDisplayPrice(product, showPriceRange)}
               </div>
             </div>
 
@@ -938,7 +949,7 @@ const MenuApp = () => {
             <motion.div
               role="dialog"
               aria-modal="true"
-              className="fixed max-w-2xl left-0 right-0 top-1/2 bottom-auto mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden p-4"
+              className="fixed max-w-2xl left-0 right-0 top-1/2 bottom-auto mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden"
               initial={{ y: '100%', opacity: 0, scale: 0.9 }}
               animate={{ y: '-50%', opacity: 1, scale: 1 }}
               exit={{ y: '100%', opacity: 0, scale: 0.9 }}
@@ -958,18 +969,60 @@ const MenuApp = () => {
               {/* Gallery Content */}
               <div className="space-y-4">
                 {/* Title */}
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 text-center mb-4">
+                <h2 className="text-2xl font-bold pt-5 pb-3 text-gray-800 dark:text-gray-100 text-center mb-4">
                   {selectedGallery.name}
                 </h2>
 
-                {/* Main Image */}
-                <div className="relative w-full h-100 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden group">
-                  <img
-                    src={selectedGallery.images[galleryImageIndex]}
-                    alt={`Gallery ${galleryImageIndex + 1}`}
-                    className="w-full h-full object-contain cursor-zoom-in"
-                    onClick={() => setGalleryImageViewerVisible(true)}
-                  />
+                <div className="relative w-full px-5 h-100 bg-gray-100 dark:bg-gray-800 overflow-hidden group">
+                  <motion.div
+                    key={galleryImageIndex}
+                    drag="x"
+                    dragElastic={0.2}
+                    dragMomentum={true}
+                    onDragEnd={(e, info) => {
+                      const swipeThreshold = 50;
+                      const swipeVelocityThreshold = 500;
+                      
+                      // Check if swipe was significant enough by distance or velocity
+                      if (Math.abs(info.offset.x) > swipeThreshold || Math.abs(info.velocity.x) > swipeVelocityThreshold) {
+                        if (info.offset.x > 0) {
+                          // Swiped right, go to previous image
+                          setGalleryImageIndex(
+                            galleryImageIndex === 0 ? selectedGallery.images.length - 1 : galleryImageIndex - 1
+                          );
+                        } else {
+                          // Swiped left, go to next image
+                          setGalleryImageIndex((galleryImageIndex + 1) % selectedGallery.images.length);
+                        }
+                      }
+                      setGalleryDragOffset(0);
+                    }}
+                    initial={{ x: 0 }}
+                    animate={{ x: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    className="flex w-full h-full gap-5"
+                  >
+                    {/* Current Image */}
+                    <div className="w-full h-full flex-shrink-0">
+                      <img
+                        src={selectedGallery.images[galleryImageIndex]}
+                        alt={`Gallery ${galleryImageIndex + 1}`}
+                        className="w-full h-full object-contain cursor-zoom-in"
+                        onClick={() => setGalleryImageViewerVisible(true)}
+                        draggable={false}
+                      />
+                    </div>
+                    
+                    {/* Next Image */}
+                    <div className="w-full h-full flex-shrink-0">
+                      <img
+                        src={selectedGallery.images[(galleryImageIndex + 1) % selectedGallery.images.length]}
+                        alt={`Gallery ${(galleryImageIndex + 2) % selectedGallery.images.length}`}
+                        className="w-full h-full object-contain"
+                        draggable={false}
+                      />
+                    </div>
+                  </motion.div>
                   
                   {/* Previous Button */}
                   <button
@@ -980,7 +1033,7 @@ const MenuApp = () => {
                           : galleryImageIndex - 1
                       )
                     }
-                    className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
+                    className="absolute left-8 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
                   >
                     <ChevronLeft className="w-6 h-6 text-white" />
                   </button>
@@ -992,7 +1045,7 @@ const MenuApp = () => {
                         (galleryImageIndex + 1) % selectedGallery.images.length
                       )
                     }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
+                    className="absolute right-8 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all duration-200"
                   >
                     <ChevronRight className="w-6 h-6 text-white" />
                   </button>
@@ -1005,7 +1058,7 @@ const MenuApp = () => {
 
                 {/* Thumbnail Strip */}
                 {selectedGallery.images.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pb-2">
+                  <div className="flex gap-2 overflow-x-auto pb-4">
                     {selectedGallery.images.map((image, index) => (
                       <button
                         key={index}
