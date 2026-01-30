@@ -998,7 +998,7 @@ const MenuApp = () => {
       </div>
 
       {/* Products Grid */}
-      <div className={`${paperView ? 'bg-orange-50/50 px-8 py-4' : 'bg-white p-4'} dark:bg-gray-900 md:px-8 flex-1`}>
+      <div className={`${paperView ? 'bg-orange-50/70 px-8 py-4' : 'bg-white p-4'} dark:bg-gray-900 md:px-8 flex-1`}>
         <div className={paperView
           ? 'max-w-3xl mx-auto min-h-[600px] space-y-10'
           : 'grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]'
