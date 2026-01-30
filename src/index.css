@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Caudex:wght@400;700&family=Italiana&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -17,4 +19,12 @@
   /* Fallback for non-webkit: limit height to approx 2 lines (adjust line-height if needed) */
   line-height: 1.2rem; /* matches Tailwind text-xs default ~1rem line-height may vary */
   max-height: 2.4rem; /* 2 * line-height */
+}
+
+.font-caudex {
+  font-family: "Caudex", serif;
+}
+
+.font-italiana {
+  font-family: "Italiana", serif;
 }

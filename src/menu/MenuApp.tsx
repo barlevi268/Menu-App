@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Coffee, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Coffee, X, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import themeClasses from './themeClasses';
 
@@ -17,6 +17,7 @@ type MenuPreferences = {
   darkMode?: boolean;
   showPriceRange?: boolean;
   expandOptions?: boolean;
+  paperView?: boolean;
 };
 type MenuItemRow = {
   price?: number | string;
@@ -95,7 +96,7 @@ const getCompanyIdFromPath = () => {
   const paramId =
     params.get('companyId') ||
     params.get('id');
-  
+
   const segments = window.location.pathname.split('/').filter(Boolean);
   if (paramId) return paramId;
   if (segments[0] === 'menu') {
@@ -109,6 +110,7 @@ const MenuApp = () => {
     () => import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co',
     []
   );
+  const isDev = React.useMemo( () => import.meta.env.IS_DEV === 'true', []);
   const [companyObject, setCompanyObject] = useState()
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -129,11 +131,13 @@ const MenuApp = () => {
   const [darkMode, setDarkMode] = useState(false);
   const [showPriceRange, setShowPriceRange] = useState(true);
   const [expandOptions, setExpandOptions] = useState(false);
+  const [paperView, setPaperView] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
   const [galleryImageViewerVisible, setGalleryImageViewerVisible] = useState(false);
   const [galleryDragOffset, setGalleryDragOffset] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const categoryButtonRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
   const categorySectionRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const categoryHeaderRefs = React.useRef<Record<string, HTMLHeadingElement | null>>({});
@@ -345,7 +349,7 @@ const MenuApp = () => {
       sortNumericKeys(prefMenuTypes).forEach((menuTypeKey) => {
         const menuType = prefMenuTypes[menuTypeKey];
         const groupName = formatLabel(normalizeValue(menuType?.name, 'menu'));
-        
+
         // Check if this is a gallery type
         if (menuType?.type === 'gallery' && Array.isArray(menuType?.images)) {
           orderedGroups.push({
@@ -357,7 +361,7 @@ const MenuApp = () => {
           });
           return;
         }
-        
+
         const arrangement = menuType?.categorieArrangment ?? {};
         const groupCategories: string[] = [];
         sortNumericKeys(arrangement).forEach((arrKey) => {
@@ -438,9 +442,9 @@ const MenuApp = () => {
         setCompanyId(resolvedCompanyId);
         setCompanyName(
           data?.company?.name ??
-            data?.companyName ??
-            data?.company_name ??
-            null
+          data?.companyName ??
+          data?.company_name ??
+          null
         );
         setCompanyObject(data?.company)
         const preferences = getPreferences(data);
@@ -476,6 +480,9 @@ const MenuApp = () => {
         }
         if (preferences?.expandOptions !== undefined) {
           setExpandOptions(preferences.expandOptions);
+        }
+        if (preferences?.paperView !== undefined) {
+          setPaperView(preferences.paperView);
         }
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
@@ -532,21 +539,20 @@ const MenuApp = () => {
     setSelectedVariant(null);
   }
 
-  const ProductCard = ({ product }: { product: any }) => {
+  const openProductDetail = (product: any) => {
     const productId = product?.$id ?? product?.id;
+    setSelectedProduct(product);
+    setDetailVisible(true);
+    trackItemViewed(productId);
+    const firstVariant = product.options?.[0]?.variant;
+    setSelectedVariant(firstVariant || null);
+  };
 
+  const ProductCard = ({ product }: { product: any }) => {
     return (
       <div
         className="relative bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
-        onClick={() => {
-          setSelectedProduct(product);
-          // show overlay
-          setDetailVisible(true);
-          trackItemViewed(productId);
-          // Set first variant as selected
-          const firstVariant = product.options?.[0]?.variant;
-          setSelectedVariant(firstVariant || null);
-        }}
+        onClick={() => openProductDetail(product)}
       >
         <div className="flex items-start p-3">
 
@@ -572,7 +578,7 @@ const MenuApp = () => {
                         <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">{variant}</div>
                         {options.map((option: { name?: string; price?: number | string }, index: number) => (
                           <div key={`${variant}-${option.name ?? 'option'}-${index}`} className="text-xs text-gray-700 dark:text-gray-300 flex justify-between pl-2">
-                            <span>{option.name?.replace(" Bottle","").replace(" Shot","") || 'Option'}</span>
+                            <span>{option.name?.replace(" Bottle", "").replace(" Shot", "") || 'Option'}</span>
                             <span className="font-semibold">{buildDisplayPrice({ options: [option] })}</span>
                           </div>
                         ))}
@@ -599,6 +605,62 @@ const MenuApp = () => {
         </div>
 
 
+      </div>
+    );
+  };
+
+  const ProductLine = ({ product }: { product: any }) => {
+    const showExpandedOptions = expandOptions && Array.isArray(product.options) && product.options.length > 0;
+    const displayPrice = showExpandedOptions ? '' : buildDisplayPrice(product, showPriceRange);
+    const hasPrice = displayPrice.trim().length > 0;
+
+    return (
+      <div
+        className="py-3 cursor-pointer group"
+        onClick={() => openProductDetail(product)}
+      >
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <h3 className="text-lg text-gray-800 dark:text-gray-100">{product.name}</h3>
+          {hasPrice && (
+            <span className="text-lg text-gray-800 dark:text-gray-100">- {displayPrice}</span>
+          )}
+        </div>
+        {product.description ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mt-1">
+            {product.description}
+          </p>
+        ) : null}
+        {showExpandedOptions && (
+          <div className="mt-2 space-y-2">
+            {(() => {
+              const variantGroups = new Map<string, typeof product.options>();
+              product.options.forEach((option: any) => {
+                const variant = option.variant || null;
+                if (!variantGroups.has(variant)) {
+                  variantGroups.set(variant, []);
+                }
+                variantGroups.get(variant)?.push(option);
+              });
+
+              return Array.from(variantGroups.entries()).map(([variant, options]) => (
+                <div key={variant ?? 'default'} className="space-y-1">
+                  {variant ? (
+                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">{variant}</div>
+                  ) : null}
+                  {options.map((option: { name?: string; price?: number | string }, index: number) => (
+                    <div
+                      key={`${variant ?? 'option'}-${option.name ?? 'option'}-${index}`}
+                      className="text-sm text-gray-700 dark:text-gray-300 flex justify-between pl-2"
+                    >
+                      <span>{option.name?.replace(" Bottle", "").replace(" Shot", "") || 'Option'}</span>
+                      <span className="font-semibold">{buildDisplayPrice({ options: [option] })}</span>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+          </div>
+        )}
       </div>
     );
   };
@@ -660,6 +722,88 @@ const MenuApp = () => {
   const activeTheme: any = isCustomColor
     ? generateThemeFromHex(themeColor)
     : (themeClasses[themeColor as keyof typeof themeClasses] ?? themeClasses.amber);
+  const tabTextClass = 'text-gray-700 dark:text-gray-200';
+  const tabHoverClass = 'hover:bg-gray-200 dark:hover:bg-gray-700';
+
+  const getGroupTabClasses = (isActive: boolean) => {
+    const classes = [
+      'flex-shrink-0',
+      'whitespace-nowrap',
+      'cursor-pointer',
+      'px-2',
+      'py-1',
+      'rounded-md',
+      'transition-colors',
+    ];
+
+    if (paperView) {
+      if (isActive) {
+        if (!isCustomColor) classes.push(activeTheme.groupActive);
+        classes.push('text-white');
+      } else {
+        classes.push(tabTextClass, tabHoverClass);
+      }
+    } else {
+      if (isActive) {
+        if (!isCustomColor) classes.push(activeTheme.groupActive);
+        classes.push('text-white');
+      } else {
+        classes.push(tabTextClass, tabHoverClass, 'bg-transparent');
+      }
+    }
+
+    return classes.join(' ');
+  };
+
+  const getGroupTabStyle = (isActive: boolean) => {
+    if (isActive && isCustomColor) {
+      return { backgroundColor: activeTheme.groupActive };
+    }
+    return undefined;
+  };
+
+  const getCategoryTabClasses = (isActive: boolean) => {
+    const classes = [
+      'flex',
+      'items-center',
+      'space-x-2',
+      'whitespace-nowrap',
+      'transition-all',
+    ];
+
+    if (paperView) {
+      classes.push('px-2', 'py-1', 'rounded-none', 'border-b-2', tabTextClass);
+      if (!isActive) {
+        classes.push('border-transparent');
+      } else if (!isCustomColor) {
+        classes.push(activeTheme.border);
+      }
+    } else {
+      classes.push('px-4', 'py-2', 'rounded-full', 'shadow-md');
+      if (isActive) {
+        if (!isCustomColor) classes.push(activeTheme.chipActive);
+        classes.push(tabTextClass);
+      } else {
+        classes.push(
+          'bg-gray-100',
+          'dark:bg-gray-700',
+          tabHoverClass,
+          'shadow-none',
+          tabTextClass
+        );
+      }
+    }
+
+    return classes.join(' ');
+  };
+
+  const getCategoryTabStyle = (isActive: boolean) => {
+    if (!isActive || !isCustomColor) return undefined;
+    if (paperView) {
+      return { borderColor: activeTheme.chipActive };
+    }
+    return { backgroundColor: activeTheme.chipActive };
+  };
 
 
   // close overlay with Escape
@@ -676,12 +820,12 @@ const MenuApp = () => {
   }, [detailVisible]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col ${paperView ? 'font-caudex' : ''}`}>
       {/* Loading Overlay */}
       {isLoading && (
         <div className="fixed inset-0 bg-white dark:bg-gray-800 z-50 flex items-center justify-center">
           <div className="text-center">
-            <div 
+            <div
               className="w-16 h-16 border-4 border-t-transparent rounded-full animate-spin mb-4"
               style={isCustomColor ? { borderColor: activeTheme.border, borderTopColor: 'transparent' } : { borderColor: activeTheme.border }}
             ></div>
@@ -699,15 +843,15 @@ const MenuApp = () => {
       <div
         className={`flex justify-center items-center relative text-white p-6 min-h-[10rem] shadow-lg bg-img ${coverPhotoUrl ? '' : (isCustomColor ? '' : `bg-gradient-to-r ${activeTheme.header}`)}`}
         style={
-          isCustomColor && !coverPhotoUrl 
+          isCustomColor && !coverPhotoUrl
             ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` }
-            : coverPhotoUrl 
-            ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : undefined
+            : coverPhotoUrl
+              ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : undefined
         }
       >
         {coverPhotoUrl && (
-          <div 
+          <div
             className="absolute inset-0 opacity-30"
             style={isCustomColor ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` } : {}}
           />
@@ -730,7 +874,7 @@ const MenuApp = () => {
       </div>
 
       {/* Category Filter */}
-      <div className="bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm ">
+      <div className={`${paperView && 'bg-orage-50/50'} bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}>
         <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
           {categoryGroups.map((group) => {
             const isGroupActive = getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
@@ -750,12 +894,8 @@ const MenuApp = () => {
                     scrollToCategoryHeader(firstCategory);
                   }
                 }}
-                className={`flex-shrink-0 whitespace-nowrap cursor-pointer px-2 py-1 rounded-md transition-colors text-white ${
-                  isGroupActive
-                    ? (isCustomColor ? '' : activeTheme.groupActive)
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 bg-transparent'
-                }`}
-                style={isGroupActive && isCustomColor ? { backgroundColor: activeTheme.groupActive } : undefined}
+                className={getGroupTabClasses(isGroupActive)}
+                style={getGroupTabStyle(isGroupActive)}
               >
                 {group.name}
               </div>
@@ -775,12 +915,8 @@ const MenuApp = () => {
                   categoryButtonRefs.current[category.id]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                   scrollToCategoryHeader(category.id);
                 }}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-white shadow-md ${
-                  isActive
-                    ? (isCustomColor ? '' : activeTheme.chipActive)
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 shadow-none'
-                }`}
-                style={isActive && isCustomColor ? { backgroundColor: activeTheme.chipActive } : undefined}
+                className={getCategoryTabClasses(isActive)}
+                style={getCategoryTabStyle(isActive)}
               >
                 <span className="font-medium">{category.name}</span>
               </button>
@@ -790,8 +926,11 @@ const MenuApp = () => {
       </div>
 
       {/* Products Grid */}
-      <div className="p-4 md:px-8 flex-1">
-        <div className="grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]">
+      <div className={`${paperView ? 'bg-orange-50/50 dark:bg-gray-900' : 'bg-white dark:bg-gray-800'} p-4 md:px-8 flex-1`}>
+        <div className={paperView
+          ? 'max-w-3xl mx-auto min-h-[600px] space-y-10'
+          : 'grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]'
+        }>
           {menuError && !isLoading && (
             <div className="text-center text-gray-600 dark:text-gray-400 font-semibold py-12">
               Menu not Found
@@ -806,18 +945,80 @@ const MenuApp = () => {
                 <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mb-6">
                   <h2
                     ref={el => (categoryHeaderRefs.current[category.id] = el)}
-                    className="text-xl font-extrabold text-gray-700 dark:text-gray-200 mb-4 px-1 border-b dark:border-gray-700 pb-2"
+                    className={`${paperView
+                      ? 'font-italiana text-4xl md:text-4xl tracking-wide text-gray-800 dark:text-gray-100'
+                      : 'text-xl font-extrabold text-gray-700 dark:text-gray-200 mb-4'
+                      } px-1 border-b dark:border-gray-700 pb-2`}
                   >
                     {category.name}
                   </h2>
                   {categoryProducts.map(product => (
-                    <ProductCard key={product.$id} product={product} />
+                    paperView
+                      ? <ProductLine key={product.$id ?? product.id} product={product} />
+                      : <ProductCard key={product.$id ?? product.id} product={product} />
                   ))}
                 </div>
               );
             })}
         </div>
       </div>
+
+      {/* Debug Settings */}
+      {isDev && (
+        <div className="justify-items-end fixed bottom-5 right-5 z-40">
+          {settingsOpen && (
+            <div className="mb-3 w-64 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-700 dark:text-gray-200">
+              <div className="space-y-3">
+                <label className="flex items-center justify-between">
+                  <span>paperView</span>
+                  <input
+                    type="checkbox"
+                    checked={paperView}
+                    onChange={(e) => setPaperView(e.target.checked)}
+                    className="h-4 w-4 accent-amber-600"
+                  />
+                </label>
+                <label className="flex items-center justify-between">
+                  <span>expandOptions</span>
+                  <input
+                    type="checkbox"
+                    checked={expandOptions}
+                    onChange={(e) => setExpandOptions(e.target.checked)}
+                    className="h-4 w-4 accent-amber-600"
+                  />
+                </label>
+                <label className="flex items-center justify-between">
+                  <span>showPriceRange</span>
+                  <input
+                    type="checkbox"
+                    checked={showPriceRange}
+                    onChange={(e) => setShowPriceRange(e.target.checked)}
+                    className="h-4 w-4 accent-amber-600"
+                  />
+                </label>
+                <label className="flex items-center justify-between">
+                  <span>darkMode</span>
+                  <input
+                    type="checkbox"
+                    checked={darkMode}
+                    onChange={(e) => setDarkMode(e.target.checked)}
+                    className="h-4 w-4 accent-amber-600"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-label="Menu settings"
+            onClick={() => setSettingsOpen((prev) => !prev)}
+            className="w-12 h-12 rounded-full shadow-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:shadow-xl transition"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
 
       {/* Product Detail Overlay */}
       <AnimatePresence mode="wait">
@@ -874,7 +1075,7 @@ const MenuApp = () => {
                 <div>
                   <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{selectedProduct.name}</h1>
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedProduct.description}</p>
-                  
+
                   {Array.isArray(selectedProduct.options) && selectedProduct.options.length > 0 ? (
                     <>
                       {/* Get unique variants */}
@@ -884,7 +1085,7 @@ const MenuApp = () => {
                             .map((opt: any) => opt.variant)
                             .filter((v: any): v is string => Boolean(v))
                         ));
-                        const filteredOptions = selectedVariant 
+                        const filteredOptions = selectedVariant
                           ? selectedProduct.options.filter((opt: any) => opt.variant === selectedVariant)
                           : selectedProduct.options;
 
@@ -898,13 +1099,12 @@ const MenuApp = () => {
                                   <button
                                     key={variant}
                                     onClick={() => setSelectedVariant(variant)}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                                      selectedVariant === variant
-                                        ? ('isCustom' in activeTheme && activeTheme.isCustom)
-                                          ? 'text-white'
-                                          : (activeTheme as any).chipActive
-                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                                    }`}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedVariant === variant
+                                      ? ('isCustom' in activeTheme && activeTheme.isCustom)
+                                        ? 'text-white'
+                                        : (activeTheme as any).chipActive
+                                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                      }`}
                                     style={
                                       selectedVariant === variant && isCustomColor
                                         ? { backgroundColor: (activeTheme as any).chipActive }
@@ -1015,7 +1215,7 @@ const MenuApp = () => {
                     onDragEnd={(e, info) => {
                       const swipeThreshold = 50;
                       const swipeVelocityThreshold = 500;
-                      
+
                       // Check if swipe was significant enough by distance or velocity
                       if (Math.abs(info.offset.x) > swipeThreshold || Math.abs(info.velocity.x) > swipeVelocityThreshold) {
                         if (info.offset.x > 0) {
@@ -1045,7 +1245,7 @@ const MenuApp = () => {
                         draggable={false}
                       />
                     </div>
-                    
+
                     {/* Next Image */}
                     <div className="w-full h-full flex-shrink-0">
                       <img
@@ -1056,7 +1256,7 @@ const MenuApp = () => {
                       />
                     </div>
                   </motion.div>
-                  
+
                   {/* Previous Button */}
                   <button
                     onClick={() =>
@@ -1096,13 +1296,11 @@ const MenuApp = () => {
                       <button
                         key={index}
                         onClick={() => setGalleryImageIndex(index)}
-                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                          index === galleryImageIndex
-                            ? `border-gray-800 dark:border-gray-200 ${
-                                isCustomColor ? '' : `${activeTheme.border}`
-                              }`
-                            : 'border-gray-300 dark:border-gray-600'
-                        }`}
+                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${index === galleryImageIndex
+                          ? `border-gray-800 dark:border-gray-200 ${isCustomColor ? '' : `${activeTheme.border}`
+                          }`
+                          : 'border-gray-300 dark:border-gray-600'
+                          }`}
                         style={
                           index === galleryImageIndex && isCustomColor
                             ? { borderColor: activeTheme.border }
