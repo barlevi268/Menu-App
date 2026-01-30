@@ -110,7 +110,7 @@ const MenuApp = () => {
     () => import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co',
     []
   );
-  const isDev = React.useMemo( () => import.meta.env.IS_DEV === 'true', []);
+  const isDev = true
   const [companyObject, setCompanyObject] = useState()
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -132,6 +132,7 @@ const MenuApp = () => {
   const [showPriceRange, setShowPriceRange] = useState(true);
   const [expandOptions, setExpandOptions] = useState(false);
   const [paperView, setPaperView] = useState(false);
+  const [menuPreferences, setMenuPreferences] = useState<MenuPreferences | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
@@ -271,10 +272,12 @@ const MenuApp = () => {
   };
 
   const buildDisplayPrice = (row: MenuItemRow, displayRange: boolean = true) => {
-    const formatPrice = (price: number) => `₱${new Intl.NumberFormat('en-PH', {
+    const isPaperView = paperView;
+    const formatPrice = (price: number) => `${isPaperView ? '' : '₱'}${new Intl.NumberFormat('en-PH', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(price)}`;
+    
     if (Array.isArray(row.options) && row.options.length > 0) {
       // If showPriceRange is false, return blank for items with options
       if (!displayRange) {
@@ -405,6 +408,100 @@ const MenuApp = () => {
     return { categories, groups };
   };
 
+  const isMenuPreferences = (value: any): value is MenuPreferences => {
+    if (!value || typeof value !== 'object') return false;
+    return (
+      'menuTypes' in value ||
+      'categories' in value ||
+      'themeColor' in value ||
+      'coverPhotoUrl' in value ||
+      'logoUrl' in value ||
+      'footerText' in value ||
+      'darkMode' in value ||
+      'showPriceRange' in value ||
+      'expandOptions' in value ||
+      'paperView' in value
+    );
+  };
+
+  const applyPreferences = React.useCallback((
+    preferences: MenuPreferences | null,
+    items?: any[],
+    options?: { merge?: boolean }
+  ) => {
+    const mergedPreferences = options?.merge
+      ? { ...(menuPreferences ?? {}), ...(preferences ?? {}) }
+      : preferences;
+
+    setMenuPreferences(mergedPreferences);
+
+    const sourceItems = items ?? products;
+    if (sourceItems.length > 0) {
+      const { categories, groups } = buildMenuMeta(sourceItems, mergedPreferences);
+      setMenuCategories(categories);
+      setCategoryGroups(groups);
+    }
+
+    if (!mergedPreferences) return;
+    if (mergedPreferences.themeColor !== undefined) {
+      setThemeColor(normalizeValue(mergedPreferences.themeColor, 'amber'));
+    }
+    if (mergedPreferences.coverPhotoUrl !== undefined) {
+      setCoverPhotoUrl(mergedPreferences.coverPhotoUrl ?? null);
+    }
+    if (mergedPreferences.logoUrl !== undefined) {
+      setLogoUrl(mergedPreferences.logoUrl ?? null);
+    }
+    if (mergedPreferences.footerText !== undefined) {
+      setFooterText(mergedPreferences.footerText ?? null);
+    }
+    if (mergedPreferences.darkMode !== undefined) {
+      setDarkMode(mergedPreferences.darkMode);
+    }
+    if (mergedPreferences.showPriceRange !== undefined) {
+      setShowPriceRange(mergedPreferences.showPriceRange);
+    }
+    if (mergedPreferences.expandOptions !== undefined) {
+      setExpandOptions(mergedPreferences.expandOptions);
+    }
+    if (mergedPreferences.paperView !== undefined) {
+      setPaperView(mergedPreferences.paperView);
+    }
+  }, [menuPreferences, products]);
+
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      let data = event.data;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || typeof data !== 'object') return;
+
+      let preferences: any = null;
+      if (data.type === 'menuPreferences') {
+        preferences = data.preferences ?? data.menuPreferences ?? data.payload ?? data.value;
+      } else if (data.menuPreferences) {
+        preferences = data.menuPreferences;
+      } else if (data.preferences && isMenuPreferences(data.preferences)) {
+        preferences = data.preferences;
+      } else if (isMenuPreferences(data)) {
+        preferences = data;
+      }
+
+      if (isMenuPreferences(preferences)) {
+        console.log('[menu] received menuPreferences message', preferences);
+        applyPreferences(preferences, undefined, { merge: true });
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [applyPreferences]);
+
   // Fetch products from API endpoint
   React.useEffect(() => {
     document.title = companyName ? `${companyName} Menu` : 'Menu';
@@ -457,33 +554,7 @@ const MenuApp = () => {
           menuType: normalizeValue(item.menuType, 'menu'),
         }));
         setProducts(items);
-        const { categories, groups } = buildMenuMeta(items, preferences);
-        setMenuCategories(categories);
-        setCategoryGroups(groups);
-        if (preferences?.themeColor) {
-          setThemeColor(normalizeValue(preferences.themeColor, 'amber'));
-        }
-        if (preferences?.coverPhotoUrl !== undefined) {
-          setCoverPhotoUrl(preferences.coverPhotoUrl ?? null);
-        }
-        if (preferences?.logoUrl !== undefined) {
-          setLogoUrl(preferences.logoUrl ?? null);
-        }
-        if (preferences?.footerText !== undefined) {
-          setFooterText(preferences.footerText ?? null);
-        }
-        if (preferences?.darkMode !== undefined) {
-          setDarkMode(preferences.darkMode);
-        }
-        if (preferences?.showPriceRange !== undefined) {
-          setShowPriceRange(preferences.showPriceRange);
-        }
-        if (preferences?.expandOptions !== undefined) {
-          setExpandOptions(preferences.expandOptions);
-        }
-        if (preferences?.paperView !== undefined) {
-          setPaperView(preferences.paperView);
-        }
+        applyPreferences(preferences, items);
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
         console.error('Failed to fetch products:', error);
@@ -616,17 +687,18 @@ const MenuApp = () => {
 
     return (
       <div
-        className="py-3 cursor-pointer group"
+        className="pt-2 cursor-pointer group"
         onClick={() => openProductDetail(product)}
       >
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1">
           <h3 className="text-lg text-gray-800 dark:text-gray-100">{product.name}</h3>
           {hasPrice && (
-            <span className="text-lg text-gray-800 dark:text-gray-100">- {displayPrice}</span>
+            // display currency sybmol in astricks style, tiny and raised
+            <span className="text-lg font-semibold text-gray-800 dark:text-gray-100">- {displayPrice}<span className='text-xs align-text-top'>₱</span></span>
           )}
         </div>
         {product.description ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mt-1">
+          <p className="text-sm text-gray-600 dark:text-gray-400 ">
             {product.description}
           </p>
         ) : null}
@@ -874,7 +946,7 @@ const MenuApp = () => {
       </div>
 
       {/* Category Filter */}
-      <div className={`${paperView && 'bg-orage-50/50'} bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}>
+      <div className={`${paperView && 'bg-orange-50'} dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}>
         <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
           {categoryGroups.map((group) => {
             const isGroupActive = getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
@@ -902,7 +974,7 @@ const MenuApp = () => {
             );
           })}
         </div>
-        <div className="flex max-w-4xl mx-auto overflow-x-auto p-4 space-x-3 scrollbar-hide">
+        <div className={`flex max-w-4xl mx-auto overflow-x-auto  space-x-3 scrollbar-hide ${paperView ? 'px-4 pt-3' : 'p-4'}`}>
           {menuCategories.map((category) => {
             const isActive = selectedCategory === category.id;
             return (
@@ -926,7 +998,7 @@ const MenuApp = () => {
       </div>
 
       {/* Products Grid */}
-      <div className={`${paperView ? 'bg-orange-50/50 dark:bg-gray-900' : 'bg-white dark:bg-gray-800'} p-4 md:px-8 flex-1`}>
+      <div className={`${paperView ? 'bg-orange-50/50 px-8 py-4' : 'bg-white p-4'} dark:bg-gray-900 md:px-8 flex-1`}>
         <div className={paperView
           ? 'max-w-3xl mx-auto min-h-[600px] space-y-10'
           : 'grid grid-cols-1 md:grid-cols-2 max-w-4xl gap-4 mx-auto min-h-[600px]'
@@ -942,13 +1014,13 @@ const MenuApp = () => {
               const categoryProducts = products.filter(p => p.category === category.id);
               if (categoryProducts.length === 0) return null;
               return (
-                <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mb-6">
+                <div key={category.id} ref={el => (categorySectionRefs.current[category.id] = el)} className="mt-6">
                   <h2
                     ref={el => (categoryHeaderRefs.current[category.id] = el)}
                     className={`${paperView
-                      ? 'font-italiana text-4xl md:text-4xl tracking-wide text-gray-800 dark:text-gray-100'
+                      ? 'font-italiana text-5xl tracking-wide text-gray-800 dark:text-gray-100 mb-2'
                       : 'text-xl font-extrabold text-gray-700 dark:text-gray-200 mb-4'
-                      } px-1 border-b dark:border-gray-700 pb-2`}
+                      } px-1 border-b dark:border-gray-700 pb-1`}
                   >
                     {category.name}
                   </h2>
