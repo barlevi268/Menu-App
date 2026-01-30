@@ -1035,8 +1035,8 @@ const MenuApp = () => {
         </div>
       </div>
 
-      {/* Debug Settings */}
-      {isDev && (
+
+      {/* {isDev && (
         <div className="justify-items-end fixed bottom-5 right-5 z-40">
           {settingsOpen && (
             <div className="mb-3 w-64 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-700 dark:text-gray-200">
@@ -1089,7 +1089,7 @@ const MenuApp = () => {
             <Settings className="w-5 h-5" />
           </button>
         </div>
-      )}
+      )} */}
 
 
       {/* Product Detail Overlay */}
