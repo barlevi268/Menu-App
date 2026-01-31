@@ -110,7 +110,10 @@ const MenuApp = () => {
     () => import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co',
     []
   );
-  const isDev = true
+  const isDev = React.useMemo(
+    () => import.meta.env.VITE_IS_DEV === 'true',
+    []
+  );
   const [companyObject, setCompanyObject] = useState()
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -524,7 +527,7 @@ const MenuApp = () => {
         const requestCompanyId = getCompanyIdFromPath();
         const path = requestCompanyId
           ? `${baseUrl}/public/customer-menu/${requestCompanyId}`
-          : `${baseUrl}/public/customer-menu`;
+          : `${baseUrl}/public/customer-menu/${import.meta.env.VITE_COMPANY_ID || ''}`;
         const res = await fetch(path, { headers: { Accept: 'application/json' } });
         if (!res.ok) {
           throw new Error(`Failed to fetch products: ${res.status}`);
@@ -946,7 +949,7 @@ const MenuApp = () => {
       </div>
 
       {/* Category Filter */}
-      <div className={`${paperView && 'bg-orange-50'} dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}>
+      <div className={`${paperView ? 'bg-orange-50' : 'bg-gray-50'} dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}>
         <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
           {categoryGroups.map((group) => {
             const isGroupActive = getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
@@ -1036,7 +1039,7 @@ const MenuApp = () => {
       </div>
 
 
-      {/* {isDev && (
+      {isDev && (
         <div className="justify-items-end fixed bottom-5 right-5 z-40">
           {settingsOpen && (
             <div className="mb-3 w-64 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-700 dark:text-gray-200">
@@ -1089,8 +1092,7 @@ const MenuApp = () => {
             <Settings className="w-5 h-5" />
           </button>
         </div>
-      )} */}
-
+      )}
 
       {/* Product Detail Overlay */}
       <AnimatePresence mode="wait">
