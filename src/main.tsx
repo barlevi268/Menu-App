@@ -33,6 +33,8 @@ function App() {
     <Routes>
       <Route path="/menu" element={<MenuApp />} />
       <Route path="/menu/:companyId" element={<MenuApp />} />
+      <Route path="/order" element={<MenuApp customerOrdersMode />} />
+      <Route path="/order/:companyId" element={<MenuApp customerOrdersMode />} />
       {/* Backup Route since some links use it */}
       <Route path="/" element={<MenuApp />} />
       <Route path="/reservations" element={<ReservationApp />} />

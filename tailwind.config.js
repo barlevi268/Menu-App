@@ -1,4 +1,4 @@
-const { heroui } = require("@heroui/theme");
+const { heroui, colors } = require("@heroui/theme");
 
 module.exports = {
   content: [
@@ -6,7 +6,13 @@ module.exports = {
     "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        colors: {
+          'orange-extra-light': 'rgb(255 251 247)',
+        },
+      },
+    },
   },
   darkMode: "class",
   plugins: [heroui()],
