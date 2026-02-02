@@ -1,51 +1,41 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 
 type OrderSuccessPanelProps = {
   isOpen: boolean;
+  orderId?: string | null;
+  paymentLink?: string | null;
+  statusLink?: string | null;
+  onPay?: () => void;
+  onViewStatus?: () => void;
   onBackToMenu: () => void;
   onClear: () => void;
 };
 
-const qrPattern = [
-  '111111111111111',
-  '100000100000001',
-  '101110101110101',
-  '101110101110101',
-  '101110101110101',
-  '100000100000001',
-  '111111111111111',
-  '000100011001000',
-  '111010111010111',
-  '001001000100100',
-  '110111010111011',
-  '000010001000010',
-  '111011101110111',
-  '100000100000001',
-  '111111111111111',
-];
+const OrderSuccessPanel = ({
+  isOpen,
+  orderId,
+  paymentLink,
+  statusLink,
+  onPay,
+  onViewStatus,
+  onBackToMenu,
+  onClear,
+}: OrderSuccessPanelProps) => {
+  const [copied, setCopied] = useState(false);
 
-const PaymentQRCode = () => {
-  const cells = qrPattern.flatMap((row) => row.split(''));
-  return (
-    <div className="bg-white rounded-3xl p-5 shadow-lg">
-      <div
-        className="grid gap-1"
-        style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}
-      >
-        {cells.map((cell, index) => (
-          <span
-            key={`qr-${index}`}
-            className={`block w-2.5 h-2.5 ${cell === '1' ? 'bg-black' : 'bg-transparent'}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
+  const handleCopy = async () => {
+    if (!statusLink || typeof navigator === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(statusLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
 
-const OrderSuccessPanel = ({ isOpen, onBackToMenu, onClear }: OrderSuccessPanelProps) => {
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
@@ -77,10 +67,51 @@ const OrderSuccessPanel = ({ isOpen, onBackToMenu, onClear }: OrderSuccessPanelP
                   Your order has been accepted
                 </h2>
                 <p className="text-sm text-gray-500 mt-2">
-                  Please scan the QR code below to complete payment.
+                  Complete payment and keep the status link for updates.
                 </p>
               </div>
-              <PaymentQRCode />
+              <div className="w-full space-y-3">
+                <button
+                  type="button"
+                  className="menu-primary-button"
+                  onClick={onPay}
+                  disabled={!paymentLink}
+                >
+                  Pay now
+                </button>
+                {!paymentLink && (
+                  <p className="text-xs text-red-500 text-center">
+                    Payment link is missing. Please try submitting again.
+                  </p>
+                )}
+              </div>
+              {statusLink && (
+                <div className="w-full rounded-2xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-gray-500">Status link</div>
+                    <div className="text-sm text-gray-700 dark:text-gray-200 break-all">
+                      {statusLink}
+                    </div>
+                    {orderId ? (
+                      <div className="text-xs text-gray-400 mt-2">Order ID: {orderId}</div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button type="button" onClick={handleCopy} className="menu-secondary-button-flex">
+                      {copied ? 'Copied' : 'Copy status link'}
+                    </button>
+                    {onViewStatus && (
+                      <button
+                        type="button"
+                        onClick={onViewStatus}
+                        className="menu-secondary-button-flex"
+                      >
+                        View status
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="menu-sheet-footer-stack">
               <button

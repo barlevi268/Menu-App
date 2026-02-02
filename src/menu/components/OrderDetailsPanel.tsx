@@ -9,6 +9,8 @@ type OrderDetailsPanelProps = {
   onUpdateCustomer: (patch: Partial<CustomerDetails>) => void;
   onBack: () => void;
   onSendOrder: () => void;
+  isSubmitting?: boolean;
+  submitError?: string | null;
 };
 
 const OrderDetailsPanel = ({
@@ -17,6 +19,8 @@ const OrderDetailsPanel = ({
   onUpdateCustomer,
   onBack,
   onSendOrder,
+  isSubmitting,
+  submitError,
 }: OrderDetailsPanelProps) => {
   return (
     <AnimatePresence mode="wait">
@@ -92,9 +96,13 @@ const OrderDetailsPanel = ({
                 type="button"
                 onClick={onSendOrder}
                 className="menu-primary-button"
+                disabled={isSubmitting}
               >
-                Send order
+                {isSubmitting ? 'Sending…' : 'Send order'}
               </button>
+              {submitError ? (
+                <p className="mt-2 text-sm text-red-500">{submitError}</p>
+              ) : null}
             </div>
           </motion.div>
         </div>

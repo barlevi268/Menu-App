@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
 import themeClasses from './themeClasses';
-import type { CategoryGroup, MenuCategory, MenuItem, MenuPreferences, OrderItemDraft } from './types';
+import type { CategoryGroup, MenuCategory, MenuItem, MenuPreferences, OrderItem, OrderItemDraft } from './types';
 import ImageViewer from './components/ImageViewer';
 import ProductCard from './components/ProductCard';
 import ProductLine from './components/ProductLine';
@@ -11,6 +11,7 @@ import OrderFloatingButton from './components/OrderFloatingButton';
 import OrderSummaryPanel from './components/OrderSummaryPanel';
 import OrderDetailsPanel from './components/OrderDetailsPanel';
 import OrderSuccessPanel from './components/OrderSuccessPanel';
+import OrderStatusPanel from './components/OrderStatusPanel';
 import { useCustomerOrder } from './hooks/useCustomerOrder';
 
 const logoImgSrc =
@@ -20,7 +21,7 @@ type MenuAppProps = {
   customerOrdersMode?: boolean;
 };
 
-type OrderStage = 'menu' | 'summary' | 'details' | 'success';
+type OrderStage = 'menu' | 'summary' | 'details' | 'success' | 'status';
 
 const getCompanyIdFromPath = () => {
   const params = new URLSearchParams(window.location.search);
@@ -29,9 +30,17 @@ const getCompanyIdFromPath = () => {
   const segments = window.location.pathname.split('/').filter(Boolean);
   if (paramId) return paramId;
   if (segments[0] === 'menu' || segments[0] === 'order') {
+    if (segments[1] === 'status') return null;
     return segments[1];
   }
   return segments[0];
+};
+
+const getOrderIdFromPath = () => {
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  const statusIndex = segments.indexOf('status');
+  if (statusIndex === -1) return null;
+  return segments[statusIndex + 1] || null;
 };
 
 const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
@@ -72,6 +81,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const categoryHeaderRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
   const menuViewedSentRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
+  const statusRequestRef = useRef(false);
 
   const orderedCategoryIds = useMemo(
     () => menuCategories.filter((c) => c.id !== 'all').map((c) => c.id),
@@ -80,6 +90,13 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
   const { state: orderState, actions: orderActions } = useCustomerOrder(companyId);
   const [orderStage, setOrderStage] = useState<OrderStage>('menu');
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [statusData, setStatusData] = useState<{ status: string | null; updatedAt: string | null } | null>(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const orderTotal = useMemo(
     () => orderState.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
@@ -89,6 +106,17 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     () => orderState.items.reduce((sum, item) => sum + item.quantity, 0),
     [orderState.items]
   );
+  const statusLink = useMemo(() => {
+    if (!orderId || typeof window === 'undefined') return null;
+    const url = new URL(window.location.href);
+    if (companyId) {
+      url.pathname = `/order/${companyId}/status/${orderId}`;
+    } else {
+      url.pathname = `/order/status/${orderId}`;
+    }
+    url.search = '';
+    return url.toString();
+  }, [orderId, companyId]);
 
   useEffect(() => {
     if (!customerOrdersMode && orderStage !== 'menu') {
@@ -97,10 +125,32 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   }, [customerOrdersMode, orderStage]);
 
   useEffect(() => {
-    if (customerOrdersMode && orderStage !== 'menu' && orderState.items.length === 0) {
+    if (orderStage !== 'details' && submitError) {
+      setSubmitError(null);
+    }
+  }, [orderStage, submitError]);
+
+  useEffect(() => {
+    if (
+      customerOrdersMode &&
+      orderStage !== 'menu' &&
+      orderStage !== 'status' &&
+      orderState.items.length === 0
+    ) {
       setOrderStage('menu');
     }
   }, [customerOrdersMode, orderStage, orderState.items.length]);
+
+  useEffect(() => {
+    if (!customerOrdersMode) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedOrderId = params.get('orderId') || params.get('status') || getOrderIdFromPath();
+    if (linkedOrderId) {
+      setOrderId(linkedOrderId);
+      setOrderStage('status');
+    }
+  }, [customerOrdersMode]);
 
   const STICKY_OFFSET = 130;
   const scrollToCategoryHeader = (id: string) => {
@@ -210,6 +260,202 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       });
     },
     [companyId, postPublicEvent]
+  );
+
+  const buildLineNotes = (item: OrderItem) => {
+    const parts: string[] = [];
+    if (item.variant) parts.push(`Variant: ${item.variant}`);
+    if (item.optionName) parts.push(`Option: ${item.optionName}`);
+    if (item.note) parts.push(item.note);
+    return parts.length > 0 ? parts.join(' | ') : undefined;
+  };
+
+  const buildCustomerOrderLines = (items: OrderItem[]) =>
+    items.map((item) => ({
+      customerMenuItemId: item.productId,
+      quantity: item.quantity,
+      notes: buildLineNotes(item),
+    }));
+
+  const buildOrderNotes = () => {
+    const parts: string[] = [];
+    if (orderState.customer.name || orderState.customer.phone) {
+      const identity = [orderState.customer.name, orderState.customer.phone]
+        .filter(Boolean)
+        .join(' · ');
+      if (identity) parts.push(`Customer: ${identity}`);
+    }
+    if (orderState.customer.notes) {
+      const trimmed = orderState.customer.notes.trim();
+      if (trimmed) parts.push(trimmed);
+    }
+    return parts.length > 0 ? parts.join(' | ') : undefined;
+  };
+
+  const getResponseError = async (res: Response) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const data = await res.json();
+        if (data?.message) return String(data.message);
+        return JSON.stringify(data);
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      const text = await res.text();
+      if (text) return text.slice(0, 200);
+    } catch {
+      // ignore
+    }
+    return `Request failed with status ${res.status}`;
+  };
+
+  const handleSubmitOrder = React.useCallback(async () => {
+    if (isSubmittingOrder) return;
+    setSubmitError(null);
+
+    if (!companyId) {
+      setSubmitError('Missing company information. Please refresh the page.');
+      return;
+    }
+    if (orderState.items.length === 0) {
+      setSubmitError('Your order is empty.');
+      return;
+    }
+
+    const totalAmount = Number(orderTotal.toFixed(2));
+    const customerOrderLines = buildCustomerOrderLines(orderState.items);
+    const orderNotes = buildOrderNotes();
+
+    try {
+      setIsSubmittingOrder(true);
+
+      const draftRes = await fetch(`${baseUrl}/public/customer-orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          customerOrderLines,
+          status: 'draft',
+          totalAmount,
+          orderNotes,
+        }),
+      });
+
+      if (!draftRes.ok) {
+        throw new Error(await getResponseError(draftRes));
+      }
+
+      const draftData = await draftRes.json();
+      const draftId = draftData?.id ?? draftData?.orderId ?? null;
+      if (!draftId) {
+        throw new Error('Failed to create a draft order.');
+      }
+
+      const submitRes = await fetch(`${baseUrl}/public/customer-orders/${draftId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          customerOrderLines,
+          status: 'received',
+          totalAmount,
+          orderNotes,
+        }),
+      });
+
+      if (!submitRes.ok) {
+        throw new Error(await getResponseError(submitRes));
+      }
+
+      const submitData = await submitRes.json();
+      const resolvedOrderId = submitData?.id ?? draftId;
+      const paymentUrl = submitData?.payment?.paymentLink ?? submitData?.paymentLink ?? null;
+
+      if (!paymentUrl) {
+        throw new Error('Payment link was not returned. Please try again.');
+      }
+
+      setOrderId(resolvedOrderId);
+      setPaymentLink(paymentUrl);
+      setStatusData({
+        status: submitData?.status ?? 'received',
+        updatedAt: submitData?.updatedAt ?? new Date().toISOString(),
+      });
+      setOrderStage('success');
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : 'Failed to submit order. Please try again.'
+      );
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  }, [
+    baseUrl,
+    companyId,
+    isSubmittingOrder,
+    orderState.items,
+    orderState.customer,
+    orderTotal,
+  ]);
+
+  const handleOpenPayment = React.useCallback(() => {
+    if (!paymentLink || typeof window === 'undefined') return;
+    window.open(paymentLink, '_blank', 'noopener,noreferrer');
+  }, [paymentLink]);
+
+  const fetchOrderStatus = React.useCallback(
+    async (targetId: string) => {
+      if (statusRequestRef.current) return;
+      statusRequestRef.current = true;
+      setStatusError(null);
+      setIsStatusLoading(true);
+      try {
+        const res = await fetch(`${baseUrl}/public/customer-orders/${targetId}/status`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          throw new Error(await getResponseError(res));
+        }
+        const data = await res.json();
+        setStatusData({
+          status: data?.status ?? null,
+          updatedAt: data?.updatedAt ?? null,
+        });
+      } catch (error) {
+        setStatusError(
+          error instanceof Error ? error.message : 'Failed to fetch status. Please retry.'
+        );
+      } finally {
+        setIsStatusLoading(false);
+        statusRequestRef.current = false;
+      }
+    },
+    [baseUrl]
+  );
+
+  const fetchOrderInfo = React.useCallback(
+    async (targetId: string) => {
+      if (paymentLink) return;
+      try {
+        const res = await fetch(`${baseUrl}/public/customer-orders/${targetId}`, {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const paymentUrl = data?.payment?.paymentLink ?? data?.paymentLink ?? null;
+        if (paymentUrl) setPaymentLink(paymentUrl);
+      } catch {
+        // ignore
+      }
+    },
+    [baseUrl, paymentLink]
   );
 
   const normalizeValue = (value: unknown, fallback: string) => {
@@ -505,6 +751,20 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
     Promise.all(imageUrls.map(preloadImage)).then(() => undefined);
   }, [products]);
+
+  useEffect(() => {
+    if (!customerOrdersMode || orderStage !== 'status' || !orderId) return;
+    void fetchOrderStatus(orderId);
+    const interval = window.setInterval(() => {
+      void fetchOrderStatus(orderId);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [customerOrdersMode, orderStage, orderId, fetchOrderStatus]);
+
+  useEffect(() => {
+    if (!customerOrdersMode || orderStage !== 'status' || !orderId) return;
+    void fetchOrderInfo(orderId);
+  }, [customerOrdersMode, orderStage, orderId, fetchOrderInfo]);
 
   const closeDetailOverlay = () => {
     setDetailVisible(false);
@@ -960,15 +1220,37 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
             customer={orderState.customer}
             onUpdateCustomer={orderActions.updateCustomer}
             onBack={() => setOrderStage('summary')}
-            onSendOrder={() => setOrderStage('success')}
+            onSendOrder={handleSubmitOrder}
+            isSubmitting={isSubmittingOrder}
+            submitError={submitError}
           />
           <OrderSuccessPanel
             isOpen={orderStage === 'success'}
+            orderId={orderId}
+            paymentLink={paymentLink}
+            statusLink={statusLink}
+            onPay={handleOpenPayment}
+            onViewStatus={() => setOrderStage('status')}
             onBackToMenu={() => setOrderStage('menu')}
             onClear={() => {
               orderActions.clearItems();
               setOrderStage('menu');
             }}
+          />
+          <OrderStatusPanel
+            isOpen={orderStage === 'status'}
+            orderId={orderId}
+            status={statusData?.status ?? null}
+            updatedAt={statusData?.updatedAt ?? null}
+            isLoading={isStatusLoading}
+            error={statusError}
+            paymentLink={paymentLink}
+            onPay={handleOpenPayment}
+            onClose={() => setOrderStage('menu')}
+            onRefresh={() => {
+              if (orderId) void fetchOrderStatus(orderId);
+            }}
+            onBackToMenu={() => setOrderStage('menu')}
           />
         </>
       )}
