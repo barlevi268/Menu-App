@@ -7,6 +7,8 @@ type OrderStatusPanelProps = {
   orderId: string | null;
   status: string | null;
   updatedAt: string | null;
+  paymentStatus?: string | null;
+  paymentAmount?: number | null;
   isLoading: boolean;
   error: string | null;
   paymentLink?: string | null;
@@ -33,6 +35,8 @@ const OrderStatusPanel = ({
   orderId,
   status,
   updatedAt,
+  paymentStatus,
+  paymentAmount,
   isLoading,
   error,
   paymentLink,
@@ -42,6 +46,8 @@ const OrderStatusPanel = ({
   onBackToMenu,
 }: OrderStatusPanelProps) => {
   const displayStatus = isLoading && !status ? 'Checking...' : formatStatus(status);
+  const displayPaymentStatus = paymentStatus ? formatStatus(paymentStatus) : 'Unknown';
+  const isPaid = paymentStatus === 'paid';
 
   return (
     <AnimatePresence mode="wait">
@@ -97,11 +103,27 @@ const OrderStatusPanel = ({
                 <div className="text-xs text-gray-500">Updated {formatDateTime(updatedAt)}</div>
               </div>
 
-              {paymentLink && onPay && (
-                <button type="button" className="menu-primary-button" onClick={onPay}>
-                  Pay now
-                </button>
-              )}
+              <div className="rounded-2xl border border-gray-200 dark:border-gray-800 p-4 space-y-2">
+                <div className="text-xs uppercase tracking-wide text-gray-500">Payment</div>
+                <div className="flex items-center justify-between">
+                  <div className={`text-lg font-semibold ${isPaid ? 'text-emerald-600' : 'text-gray-800 dark:text-gray-100'}`}>
+                    {displayPaymentStatus}
+                  </div>
+                  {typeof paymentAmount === 'number' && (
+                    <div className="text-sm text-gray-500">₱{paymentAmount.toFixed(2)}</div>
+                  )}
+                </div>
+                {!isPaid && paymentLink && onPay && (
+                  <button type="button" className="menu-primary-button" onClick={onPay}>
+                    Pay now
+                  </button>
+                )}
+                {isPaid && (
+                  <div className="text-xs text-emerald-600">Payment received</div>
+                )}
+              </div>
+
+              
             </div>
 
             <div className="menu-sheet-footer space-y-3">

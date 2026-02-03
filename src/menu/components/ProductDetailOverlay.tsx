@@ -107,7 +107,7 @@ const ProductDetailOverlay = ({
             aria-modal="true"
             className={`${paperView ? 'bg-[#FFFBF7] dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800'} menu-detail-panel max-w-[450px]`}
             initial={{ y: '100%', opacity: 0 }}
-            animate={{ y: product.image ? 0 : 288, opacity: 1 }}
+            animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', stiffness: 240, damping: 25 }}
           >
@@ -134,14 +134,17 @@ const ProductDetailOverlay = ({
               </div>
             </div>
 
-            <div className="menu-detail-content max-h-[60vh]">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
-                  {product.name}
-                </h1>
-                <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                  {product.description}
-                </p>
+            <div className="menu-detail-scroll">
+              <div
+                className={`menu-detail-content ${customerOrdersMode ? 'pb-32' : ''}`}
+              >
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mr-7">
+                    {product.name}
+                  </h1>
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {product.description}
+                  </p>
 
                 {Array.isArray(product.options) && product.options.length > 0 ? (
                   <>
@@ -279,8 +282,8 @@ const ProductDetailOverlay = ({
                 )}
 
                 {customerOrdersMode && (
-                  <div className="menu-detail-sticky">
-                    <div className="flex items-center justify-between">
+                  <div className="mt-6 space-y-4">
+                    {/* <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
@@ -306,7 +309,7 @@ const ProductDetailOverlay = ({
                           {formatPrice(lineTotal, { paperView })}
                         </div>
                       </div>
-                    </div>
+                    </div> */}
 
                     <div>
                       <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -320,18 +323,18 @@ const ProductDetailOverlay = ({
                         rows={3}
                       />
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAdd}
-                      className="menu-primary-button-cta"
-                    >
-                      Add to order · {formatPrice(lineTotal, { paperView })}
-                    </button>
                   </div>
                 )}
               </div>
             </div>
+            </div>
+            {customerOrdersMode && onAddToOrder && (
+              <div className="menu-detail-cta">
+                <button type="button" onClick={handleAdd} className="menu-primary-button-cta">
+                  Add to order · {formatPrice(lineTotal, { paperView })}
+                </button>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

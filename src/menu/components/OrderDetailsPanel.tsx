@@ -22,6 +22,8 @@ const OrderDetailsPanel = ({
   isSubmitting,
   submitError,
 }: OrderDetailsPanelProps) => {
+  const dispatchInfo = customer.dispatchInfo ?? { address: '', notes: '' };
+
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
@@ -60,6 +62,30 @@ const OrderDetailsPanel = ({
 
             <div className="menu-sheet-body">
               <div>
+                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Dispatch type
+                </label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {(['Pickup', 'Delivery'] as const).map((type) => {
+                    const isActive = customer.dispatchType === type;
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => onUpdateCustomer({ dispatchType: type })}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                          isActive
+                            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                            : 'border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-200'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
                 <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Full name</label>
                 <input
                   type="text"
@@ -89,6 +115,48 @@ const OrderDetailsPanel = ({
                   rows={4}
                 />
               </div>
+              {customer.dispatchType === 'Delivery' && (
+                <>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      value={dispatchInfo.address}
+                      onChange={(e) =>
+                        onUpdateCustomer({
+                          dispatchInfo: {
+                            ...dispatchInfo,
+                            address: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Enter delivery address"
+                      className="menu-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Delivery notes
+                    </label>
+                    <textarea
+                      value={dispatchInfo.notes}
+                      onChange={(e) =>
+                        onUpdateCustomer({
+                          dispatchInfo: {
+                            ...dispatchInfo,
+                            notes: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Gate code, landmark, etc."
+                      className="menu-input"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="menu-sheet-footer">

@@ -5,6 +5,11 @@ const EMPTY_CUSTOMER: CustomerDetails = {
   name: '',
   phone: '',
   notes: '',
+  dispatchType: 'Pickup',
+  dispatchInfo: {
+    address: '',
+    notes: '',
+  },
 };
 
 const EMPTY_STATE: CustomerOrderState = {
@@ -24,6 +29,12 @@ const safeParse = (value: string | null): CustomerOrderState | null => {
         name: parsed.customer?.name ?? '',
         phone: parsed.customer?.phone ?? '',
         notes: parsed.customer?.notes ?? '',
+        dispatchType:
+          parsed.customer?.dispatchType === 'Delivery' ? 'Delivery' : 'Pickup',
+        dispatchInfo: {
+          address: parsed.customer?.dispatchInfo?.address ?? '',
+          notes: parsed.customer?.dispatchInfo?.notes ?? '',
+        },
       },
       updatedAt: parsed.updatedAt ?? null,
     };
@@ -184,6 +195,12 @@ export const useCustomerOrder = (companyId?: string | null) => {
       customer: {
         ...prev.customer,
         ...patch,
+        dispatchInfo: patch.dispatchInfo
+          ? {
+              ...(prev.customer.dispatchInfo ?? { address: '', notes: '' }),
+              ...patch.dispatchInfo,
+            }
+          : prev.customer.dispatchInfo ?? { address: '', notes: '' },
       },
       updatedAt: new Date().toISOString(),
     }));

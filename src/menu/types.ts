@@ -68,6 +68,11 @@ export type CustomerDetails = {
   name: string;
   phone: string;
   notes: string;
+  dispatchType: 'Pickup' | 'Delivery';
+  dispatchInfo: {
+    address: string;
+    notes: string;
+  };
 };
 
 export type CustomerOrderState = {

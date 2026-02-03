@@ -7,10 +7,28 @@ type OrderFloatingButtonProps = {
   totalPrice: number;
   onClick: () => void;
   paperView: boolean;
+  mode?: 'cart' | 'ongoing';
+  statusLabel?: string | null;
 };
 
-const OrderFloatingButton = ({ totalItems, totalPrice, onClick, paperView }: OrderFloatingButtonProps) => {
-  if (totalItems <= 0) return null;
+const formatStatusLabel = (value: string | null | undefined) => {
+  if (!value) return 'Unknown';
+  return value
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const OrderFloatingButton = ({
+  totalItems,
+  totalPrice,
+  onClick,
+  paperView,
+  mode = 'cart',
+  statusLabel,
+}: OrderFloatingButtonProps) => {
+  const isOngoing = mode === 'ongoing';
+  if (!isOngoing && totalItems <= 0) return null;
 
   return (
     <div className="menu-fab-wrapper">
@@ -19,14 +37,38 @@ const OrderFloatingButton = ({ totalItems, totalPrice, onClick, paperView }: Ord
         onClick={onClick}
         className="menu-fab-button"
       >
-        <span className="menu-fab-text">
-          <span className="menu-fab-count">{totalItems}</span>
-          My Order
-        </span>
-        <span className="menu-fab-text">
-          {formatPrice(totalPrice, { paperView })}
-          <ChevronRight className="w-6 h-6" />
-        </span>
+        {isOngoing ? (
+          <>
+            <span className="menu-fab-text">
+              <span className="relative flex h-3 w-3 items-center justify-center mr-1">
+                <span className="absolute inline-flex h-full w-full animate-ping animate-ping-slow rounded-full bg-sky-300 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-400" />
+              </span>
+              <div className='text-left'>
+                <span className="text-sm font-semibold text-gray-50">
+                  Your order is being processed.
+                </span>
+                <div className="text-xs text-gray-200">
+                  Status: {formatStatusLabel(statusLabel)}
+                </div>
+              </div>
+            </span>
+            <span className="menu-fab-text">
+              <ChevronRight className="w-5 h-5" />
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="menu-fab-text">
+              <span className="menu-fab-count">{totalItems}</span>
+              My Order
+            </span>
+            <span className="menu-fab-text">
+              {formatPrice(totalPrice, { paperView })}
+              <ChevronRight className="w-6 h-6" />
+            </span>
+          </>
+        )}
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Settings } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Pointer, Settings } from 'lucide-react';
 import themeClasses from './themeClasses';
 import type { CategoryGroup, MenuCategory, MenuItem, MenuPreferences, OrderItem, OrderItemDraft } from './types';
 import ImageViewer from './components/ImageViewer';
@@ -43,6 +44,28 @@ const getOrderIdFromPath = () => {
   return segments[statusIndex + 1] || null;
 };
 
+const getReservationCustomerIdFromQuery = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('reservationCustomerId') || params.get('customerId') || null;
+};
+
+const getReservationSlotIdFromQuery = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('reservationSlotId') || params.get('slotId') || null;
+};
+
+const getReservationPaxFromQuery = () => {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get('pax');
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return Math.floor(parsed);
+};
+
+const getActiveOrderStorageKey = (companyId?: string | null) =>
+  companyId ? `customer-order:active:${companyId}` : 'customer-order:active:pending';
+
 const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const baseUrl = useMemo(
     () => import.meta.env.VITE_API_BASE_URL || 'https://api.orda.co',
@@ -76,12 +99,16 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
   const [galleryImageViewerVisible, setGalleryImageViewerVisible] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showMenuScrollHint, setShowMenuScrollHint] = useState(false);
 
   const categoryButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const categoryHeaderRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
   const menuViewedSentRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
   const statusRequestRef = useRef(false);
+  const statusCheckRef = useRef<string | null>(null);
+  const menuScrollHintTimeoutRef = useRef<number | null>(null);
+  const hasShownMenuScrollHintRef = useRef(false);
 
   const orderedCategoryIds = useMemo(
     () => menuCategories.filter((c) => c.id !== 'all').map((c) => c.id),
@@ -92,9 +119,16 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const [orderStage, setOrderStage] = useState<OrderStage>('menu');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [reservationCustomerId, setReservationCustomerId] = useState<string | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [statusData, setStatusData] = useState<{ status: string | null; updatedAt: string | null } | null>(null);
+  const [statusData, setStatusData] = useState<{
+    status: string | null;
+    updatedAt: string | null;
+    paymentStatus: string | null;
+    paymentAmount: number | null;
+    paymentLink: string | null;
+  } | null>(null);
   const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -106,6 +140,9 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     () => orderState.items.reduce((sum, item) => sum + item.quantity, 0),
     [orderState.items]
   );
+  const ongoingStatus = statusData?.status ?? null;
+  const hasOngoingOrder =
+    Boolean(orderId && ongoingStatus) && ongoingStatus !== 'draft' && ongoingStatus !== 'deleted';
   const statusLink = useMemo(() => {
     if (!orderId || typeof window === 'undefined') return null;
     const url = new URL(window.location.href);
@@ -117,6 +154,47 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     url.search = '';
     return url.toString();
   }, [orderId, companyId]);
+
+  const getStoredActiveOrderId = React.useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const key = getActiveOrderStorageKey(companyId);
+      const stored = window.localStorage.getItem(key);
+      if (stored) return stored;
+      if (companyId) {
+        return window.localStorage.getItem(getActiveOrderStorageKey(null));
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [companyId]);
+
+  const setStoredActiveOrderId = React.useCallback(
+    (id: string) => {
+      if (typeof window === 'undefined') return;
+      try {
+        const key = getActiveOrderStorageKey(companyId);
+        window.localStorage.setItem(key, id);
+        if (companyId) {
+          window.localStorage.removeItem(getActiveOrderStorageKey(null));
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [companyId]
+  );
+
+  const clearStoredActiveOrderId = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(getActiveOrderStorageKey(companyId));
+      window.localStorage.removeItem(getActiveOrderStorageKey(null));
+    } catch {
+      // ignore
+    }
+  }, [companyId]);
 
   useEffect(() => {
     if (!customerOrdersMode && orderStage !== 'menu') {
@@ -146,11 +224,16 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const linkedOrderId = params.get('orderId') || params.get('status') || getOrderIdFromPath();
+    const linkedCustomerId = getReservationCustomerIdFromQuery();
     if (linkedOrderId) {
       setOrderId(linkedOrderId);
       setOrderStage('status');
+      setStoredActiveOrderId(linkedOrderId);
     }
-  }, [customerOrdersMode]);
+    if (linkedCustomerId) {
+      setReservationCustomerId(linkedCustomerId);
+    }
+  }, [customerOrdersMode, setStoredActiveOrderId]);
 
   const STICKY_OFFSET = 130;
   const scrollToCategoryHeader = (id: string) => {
@@ -192,6 +275,24 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       if (nextId && nextId !== selectedCategory) {
         setSelectedCategory(nextId);
       }
+
+      if (
+        customerOrdersMode &&
+        orderStage === 'menu' &&
+        !hasShownMenuScrollHintRef.current &&
+        window.scrollY > 0
+      ) {
+        hasShownMenuScrollHintRef.current = true;
+        if (menuScrollHintTimeoutRef.current) {
+          window.clearTimeout(menuScrollHintTimeoutRef.current);
+        }
+        menuScrollHintTimeoutRef.current = window.setTimeout(() => {
+          setShowMenuScrollHint(true);
+          menuScrollHintTimeoutRef.current = window.setTimeout(() => {
+            setShowMenuScrollHint(false);
+          }, 4000);
+        }, 500);
+      }
       ticking = false;
     };
 
@@ -210,7 +311,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
     };
-  }, [STICKY_OFFSET, orderedCategoryIds, selectedCategory]);
+  }, [STICKY_OFFSET, orderedCategoryIds, selectedCategory, customerOrdersMode, orderStage]);
 
   useEffect(() => {
     const btn = categoryButtonRefs.current[selectedCategory];
@@ -278,18 +379,8 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     }));
 
   const buildOrderNotes = () => {
-    const parts: string[] = [];
-    if (orderState.customer.name || orderState.customer.phone) {
-      const identity = [orderState.customer.name, orderState.customer.phone]
-        .filter(Boolean)
-        .join(' · ');
-      if (identity) parts.push(`Customer: ${identity}`);
-    }
-    if (orderState.customer.notes) {
-      const trimmed = orderState.customer.notes.trim();
-      if (trimmed) parts.push(trimmed);
-    }
-    return parts.length > 0 ? parts.join(' | ') : undefined;
+    const trimmed = orderState.customer.notes.trim();
+    return trimmed ? trimmed : undefined;
   };
 
   const getResponseError = async (res: Response) => {
@@ -312,6 +403,51 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     return `Request failed with status ${res.status}`;
   };
 
+  const createReservationCustomer = React.useCallback(async () => {
+    if (reservationCustomerId) return reservationCustomerId;
+    if (typeof window === 'undefined') return null;
+    const slotId = getReservationSlotIdFromQuery();
+    if (!slotId) return null;
+
+    const name = orderState.customer.name.trim();
+    if (!name) {
+      throw new Error('Please enter your name to continue.');
+    }
+
+    const payload = {
+      slotId,
+      pax: getReservationPaxFromQuery() ?? 1,
+      customerName: name,
+      customerMobileNumber: orderState.customer.phone.trim() || undefined,
+    };
+
+    const res = await fetch(`${baseUrl}/reservations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(await getResponseError(res));
+    }
+
+    const data = await res.json();
+    const createdId = data?.customerId ?? data?.customer?.id ?? null;
+    if (!createdId) {
+      throw new Error('Failed to create customer profile.');
+    }
+    setReservationCustomerId(createdId);
+    return createdId;
+  }, [
+    baseUrl,
+    reservationCustomerId,
+    orderState.customer.name,
+    orderState.customer.phone,
+  ]);
+
   const handleSubmitOrder = React.useCallback(async () => {
     if (isSubmittingOrder) return;
     setSubmitError(null);
@@ -324,6 +460,19 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       setSubmitError('Your order is empty.');
       return;
     }
+    const customerName = orderState.customer.name.trim();
+    const customerPhone = orderState.customer.phone.trim();
+    const dispatchType = orderState.customer.dispatchType;
+    const dispatchInfo = orderState.customer.dispatchInfo ?? { address: '', notes: '' };
+    const dispatchAddress = dispatchInfo.address.trim();
+    if (!customerName || !customerPhone) {
+      setSubmitError('Please enter your name and phone number.');
+      return;
+    }
+    if (dispatchType === 'Delivery' && !dispatchAddress) {
+      setSubmitError('Please enter your delivery address.');
+      return;
+    }
 
     const totalAmount = Number(orderTotal.toFixed(2));
     const customerOrderLines = buildCustomerOrderLines(orderState.items);
@@ -331,6 +480,26 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
     try {
       setIsSubmittingOrder(true);
+      const reservationId = await createReservationCustomer();
+
+      const draftPayload: Record<string, unknown> = {
+        customerName,
+        customerPhone,
+        customerOrderLines,
+        status: 'draft',
+        totalAmount,
+        orderNotes,
+      };
+      draftPayload.dispatchType = dispatchType;
+      if (dispatchType === 'Delivery') {
+        draftPayload.dispatchInfo = {
+          address: dispatchAddress,
+          notes: dispatchInfo.notes.trim() || undefined,
+        };
+      }
+      if (reservationId) {
+        draftPayload.customerId = reservationId;
+      }
 
       const draftRes = await fetch(`${baseUrl}/public/customer-orders`, {
         method: 'POST',
@@ -338,12 +507,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          customerOrderLines,
-          status: 'draft',
-          totalAmount,
-          orderNotes,
-        }),
+        body: JSON.stringify(draftPayload),
       });
 
       if (!draftRes.ok) {
@@ -356,18 +520,30 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         throw new Error('Failed to create a draft order.');
       }
 
+      const submitPayload: Record<string, unknown> = {
+        customerOrderLines,
+        status: 'received',
+        totalAmount,
+        orderNotes,
+      };
+      submitPayload.dispatchType = dispatchType;
+      if (dispatchType === 'Delivery') {
+        submitPayload.dispatchInfo = {
+          address: dispatchAddress,
+          notes: dispatchInfo.notes.trim() || undefined,
+        };
+      }
+      if (reservationId) {
+        submitPayload.reservationCustomerId = reservationId;
+      }
+
       const submitRes = await fetch(`${baseUrl}/public/customer-orders/${draftId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({
-          customerOrderLines,
-          status: 'received',
-          totalAmount,
-          orderNotes,
-        }),
+        body: JSON.stringify(submitPayload),
       });
 
       if (!submitRes.ok) {
@@ -384,9 +560,14 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
       setOrderId(resolvedOrderId);
       setPaymentLink(paymentUrl);
+      setStoredActiveOrderId(resolvedOrderId);
       setStatusData({
         status: submitData?.status ?? 'received',
         updatedAt: submitData?.updatedAt ?? new Date().toISOString(),
+        paymentStatus: submitData?.payment?.status ?? null,
+        paymentAmount:
+          typeof submitData?.payment?.amount === 'number' ? submitData.payment.amount : null,
+        paymentLink: paymentUrl,
       });
       setOrderStage('success');
     } catch (error) {
@@ -399,10 +580,12 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   }, [
     baseUrl,
     companyId,
+    createReservationCustomer,
     isSubmittingOrder,
     orderState.items,
     orderState.customer,
     orderTotal,
+    setStoredActiveOrderId,
   ]);
 
   const handleOpenPayment = React.useCallback(() => {
@@ -412,7 +595,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
   const fetchOrderStatus = React.useCallback(
     async (targetId: string) => {
-      if (statusRequestRef.current) return;
+      if (statusRequestRef.current) return null;
       statusRequestRef.current = true;
       setStatusError(null);
       setIsStatusLoading(true);
@@ -424,14 +607,31 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           throw new Error(await getResponseError(res));
         }
         const data = await res.json();
+        const paymentFromStatus = data?.payment ?? null;
+        const paymentUrl =
+          paymentFromStatus?.paymentLink ??
+          paymentFromStatus?.payment_link ??
+          data?.paymentLink ??
+          null;
+
         setStatusData({
           status: data?.status ?? null,
           updatedAt: data?.updatedAt ?? null,
+          paymentStatus: paymentFromStatus?.status ?? null,
+          paymentAmount:
+            typeof paymentFromStatus?.amount === 'number' ? paymentFromStatus.amount : null,
+          paymentLink: paymentUrl,
         });
+
+        if (paymentUrl) {
+          setPaymentLink(paymentUrl);
+        }
+        return data;
       } catch (error) {
         setStatusError(
           error instanceof Error ? error.message : 'Failed to fetch status. Please retry.'
         );
+        return null;
       } finally {
         setIsStatusLoading(false);
         statusRequestRef.current = false;
@@ -439,6 +639,47 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     },
     [baseUrl]
   );
+
+  const clearLocalOrderState = React.useCallback(() => {
+    orderActions.clearItems();
+    orderActions.updateCustomer({
+      name: '',
+      phone: '',
+      notes: '',
+      dispatchType: 'Pickup',
+      dispatchInfo: { address: '', notes: '' },
+    });
+    setOrderId(null);
+    setPaymentLink(null);
+    setStatusData(null);
+    setOrderStage('menu');
+    clearStoredActiveOrderId();
+  }, [orderActions, clearStoredActiveOrderId]);
+
+  const checkExistingOrderStatus = React.useCallback(
+    async (existingId: string) => {
+      const data = await fetchOrderStatus(existingId);
+      const status = data?.status ?? null;
+      if (!status) return;
+      if (status === 'draft') return;
+      if (status === 'deleted') {
+        clearLocalOrderState();
+        return;
+      }
+      setOrderId(existingId);
+    },
+    [fetchOrderStatus, clearLocalOrderState]
+  );
+
+  useEffect(() => {
+    if (!customerOrdersMode) return;
+    if (orderStage !== 'menu') return;
+    const storedId = getStoredActiveOrderId();
+    if (!storedId) return;
+    if (statusCheckRef.current === storedId) return;
+    statusCheckRef.current = storedId;
+    void checkExistingOrderStatus(storedId);
+  }, [customerOrdersMode, orderStage, getStoredActiveOrderId, checkExistingOrderStatus]);
 
   const fetchOrderInfo = React.useCallback(
     async (targetId: string) => {
@@ -928,6 +1169,14 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     return () => window.removeEventListener('keydown', handler);
   }, [detailVisible]);
 
+  useEffect(() => {
+    return () => {
+      if (menuScrollHintTimeoutRef.current) {
+        window.clearTimeout(menuScrollHintTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div
       className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col ${
@@ -948,6 +1197,23 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {customerOrdersMode && orderStage === 'menu' && showMenuScrollHint && (
+          <motion.div
+            className="fixed inset-0 z-40 pointer-events-none flex items-center justify-center"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="flex flex-col items-center gap-3 text-sm font-semibold text-white py-4 px-6 bg-gray-800/70 rounded-2xl shadow-lg pointer-events-auto">
+              <Pointer className="h-7 w-7 menu-pointer-float" />
+              <div className='text-xl'>Select an option</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {selectedProduct?.image && (
         <ImageViewer
@@ -1171,7 +1437,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         activeTheme={activeTheme}
         isCustomColor={isCustomColor}
         customerOrdersMode={customerOrdersMode}
-        onAddToOrder={handleAddToOrder}
+        onAddToOrder={hasOngoingOrder ? undefined : handleAddToOrder}
         paperView={paperView}
       />
 
@@ -1193,12 +1459,14 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         isCustomColor={isCustomColor}
       />
 
-      {customerOrdersMode && orderStage === 'menu' && (
+      {customerOrdersMode && orderStage === 'menu' && (hasOngoingOrder || orderItemsCount > 0) && (
         <OrderFloatingButton
           totalItems={orderItemsCount}
           totalPrice={orderTotal}
-          onClick={() => setOrderStage('summary')}
+          onClick={() => setOrderStage(hasOngoingOrder ? 'status' : 'summary')}
           paperView={paperView}
+          mode={hasOngoingOrder ? 'ongoing' : 'cart'}
+          statusLabel={hasOngoingOrder ? ongoingStatus : null}
         />
       )}
 
@@ -1242,6 +1510,8 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
             orderId={orderId}
             status={statusData?.status ?? null}
             updatedAt={statusData?.updatedAt ?? null}
+            paymentStatus={statusData?.paymentStatus ?? null}
+            paymentAmount={statusData?.paymentAmount ?? null}
             isLoading={isStatusLoading}
             error={statusError}
             paymentLink={paymentLink}

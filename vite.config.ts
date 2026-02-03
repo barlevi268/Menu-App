@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true, // or use '0.0.0.0'
-    port: 5173 // or whatever port you prefer
+    port: 5173, // or whatever port you prefer
+    allowedHosts: ['nontransiently-saunciest-estell.ngrok-free.dev'],
   },
 })

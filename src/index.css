@@ -6,7 +6,7 @@
 
 @layer components {
   .menu-overlay {
-    @apply fixed inset-0 z-50;
+    @apply fixed inset-0 z-50 flex items-end justify-center;
   }
 
   .menu-backdrop {
@@ -58,15 +58,15 @@
   }
 
   .menu-primary-button {
-    @apply w-full rounded-full bg-gray-900 text-white py-3 font-semibold disabled:bg-gray-400;
+    @apply w-full rounded-full bg-gray-800 text-white py-3 font-semibold disabled:bg-gray-400;
   }
 
   .menu-primary-button-flex {
-    @apply flex-1 rounded-full bg-gray-900 text-white py-3 font-semibold disabled:bg-gray-400;
+    @apply flex-1 rounded-full bg-gray-800 text-white py-3 font-semibold disabled:bg-gray-400;
   }
 
   .menu-primary-button-cta {
-    @apply w-full rounded-full bg-gray-900 text-white py-3 font-semibold tracking-wide hover:bg-gray-800 transition;
+    @apply w-full rounded-full bg-gray-800 text-white py-3 font-semibold tracking-wide hover:bg-gray-800 transition;
   }
 
   .menu-secondary-button {
@@ -102,7 +102,8 @@
   }
 
   .menu-detail-panel {
-    @apply fixed left-0 right-0 top-12 bottom-0 mx-auto rounded-t-2xl shadow-xl overflow-auto;
+    @apply relative w-full mx-auto rounded-t-2xl shadow-xl overflow-hidden flex flex-col;
+    max-height: calc(100dvh - 1.5rem);
   }
 
   .menu-detail-image {
@@ -113,12 +114,31 @@
     @apply p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors shadow-lg;
   }
 
-  .menu-detail-content {
-    @apply p-6 space-y-6 overflow-auto;
+  .menu-detail-scroll {
+    @apply flex-1 min-h-0 overflow-auto;
   }
 
-  .menu-detail-sticky {
-    @apply sticky bottom-0 -mx-6 px-6 pb-6 pt-4 mt-6 space-y-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800;
+  .menu-detail-content {
+    @apply p-6 space-y-6;
+  }
+
+  .menu-detail-cta {
+    @apply absolute bottom-0 left-0 right-0 px-6 pb-6 pt-4 border-t dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md;
+  }
+}
+
+@layer utilities {
+  @keyframes menu-pointer-float {
+    0%, 100% {
+      transform: translateY(4px);
+    }
+    50% {
+      transform: translateY(5-px);
+    }
+  }
+
+  .menu-pointer-float {
+    animation: menu-pointer-float 2s ease-in-out infinite;
   }
 }
 
@@ -145,4 +165,8 @@
 
 .font-italiana {
   font-family: "Italiana", serif;
+}
+
+.animate-ping-slow {
+  animation: ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
