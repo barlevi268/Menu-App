@@ -9,6 +9,7 @@ type OrderFloatingButtonProps = {
   paperView: boolean;
   mode?: 'cart' | 'ongoing';
   statusLabel?: string | null;
+  isHidden?: boolean;
 };
 
 const formatStatusLabel = (value: string | null | undefined) => {
@@ -26,16 +27,21 @@ const OrderFloatingButton = ({
   paperView,
   mode = 'cart',
   statusLabel,
+  isHidden,
 }: OrderFloatingButtonProps) => {
   const isOngoing = mode === 'ongoing';
-  if (!isOngoing && totalItems <= 0) return null;
+  const shouldHide = isHidden ?? (!isOngoing && totalItems <= 0);
 
   return (
     <div className="menu-fab-wrapper">
       <button
+        data-order-fab
         type="button"
         onClick={onClick}
         className="menu-fab-button"
+        aria-hidden={shouldHide ? true : undefined}
+        tabIndex={shouldHide ? -1 : undefined}
+        style={shouldHide ? { opacity: 0, pointerEvents: 'none' } : undefined}
       >
         {isOngoing ? (
           <>
@@ -60,7 +66,9 @@ const OrderFloatingButton = ({
         ) : (
           <>
             <span className="menu-fab-text">
-              <span className="menu-fab-count">{totalItems}</span>
+              <span className="menu-fab-count" data-order-fab-count>
+                {totalItems}
+              </span>
               My Order
             </span>
             <span className="menu-fab-text">

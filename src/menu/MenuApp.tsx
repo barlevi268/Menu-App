@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Pointer, Settings } from 'lucide-react';
 import themeClasses from './themeClasses';
@@ -18,11 +18,79 @@ import { useCustomerOrder } from './hooks/useCustomerOrder';
 const logoImgSrc =
   'https://fra.cloud.appwrite.io/v1/storage/buckets/687dd5ef002a30eca0f9/files/687e5635002794eeec27/view?project=67d54dea00199fd0947e&mode=admin';
 
+const MENU_CACHE_VERSION = 1;
+const MENU_CACHE_PREFIX = 'menu-cache-v1';
+const MENU_IMAGE_CACHE = 'menu-images-v1';
+
 type MenuAppProps = {
   customerOrdersMode?: boolean;
 };
 
 type OrderStage = 'menu' | 'summary' | 'details' | 'success' | 'status';
+
+type MenuCachePayload = {
+  version: number;
+  cachedAt: string;
+  companyId: string | null;
+  companyName: string | null;
+  company?: any | null;
+  preferences: MenuPreferences | null;
+  items: MenuItem[];
+};
+
+const getMenuCacheKey = (companyKey: string | null) =>
+  `${MENU_CACHE_PREFIX}:${companyKey ?? 'default'}`;
+
+const readMenuCache = (cacheKey: string): MenuCachePayload | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MenuCachePayload;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.version !== MENU_CACHE_VERSION) return null;
+    if (!Array.isArray(parsed.items)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeMenuCache = (cacheKey: string, payload: MenuCachePayload) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(cacheKey, JSON.stringify(payload));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const collectImageUrls = (
+  items: MenuItem[],
+  preferences: MenuPreferences | null,
+  fallbackLogoUrl?: string | null
+) => {
+  const urls = new Set<string>();
+  items.forEach((item) => {
+    if (item.image) urls.add(item.image);
+  });
+
+  if (preferences?.coverPhotoUrl) urls.add(preferences.coverPhotoUrl);
+  if (preferences?.logoUrl) urls.add(preferences.logoUrl);
+  if (fallbackLogoUrl) urls.add(fallbackLogoUrl);
+
+  if (preferences?.menuTypes) {
+    Object.values(preferences.menuTypes).forEach((menuType) => {
+      if (Array.isArray(menuType?.images)) {
+        menuType.images.forEach((url) => {
+          if (url) urls.add(url);
+        });
+      }
+    });
+  }
+
+  return Array.from(urls);
+};
 
 const getCompanyIdFromPath = () => {
   const params = new URLSearchParams(window.location.search);
@@ -94,6 +162,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const [expandOptions, setExpandOptions] = useState(false);
   const [paperView, setPaperView] = useState(false);
   const [menuPreferences, setMenuPreferences] = useState<MenuPreferences | null>(null);
+  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({});
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [selectedGallery, setSelectedGallery] = useState<{ name: string; images: string[] } | null>(null);
   const [galleryImageIndex, setGalleryImageIndex] = useState(0);
@@ -109,6 +178,13 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const statusCheckRef = useRef<string | null>(null);
   const menuScrollHintTimeoutRef = useRef<number | null>(null);
   const hasShownMenuScrollHintRef = useRef(false);
+  const hasHydratedFromCacheRef = useRef(false);
+  const hydratedCacheKeyRef = useRef<string | null>(null);
+  const requestCompanyIdRef = useRef<string | null>(null);
+  const imageOverridesRef = useRef<Record<string, string>>({});
+  const companyDetailsRef = useRef<any | null>(null);
+  const menuPreferencesRef = useRef<MenuPreferences | null>(null);
+  const productsRef = useRef<MenuItem[]>([]);
 
   const orderedCategoryIds = useMemo(
     () => menuCategories.filter((c) => c.id !== 'all').map((c) => c.id),
@@ -699,6 +775,96 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     [baseUrl, paymentLink]
   );
 
+  useEffect(() => {
+    imageOverridesRef.current = imageOverrides;
+  }, [imageOverrides]);
+
+  useEffect(() => {
+    menuPreferencesRef.current = menuPreferences;
+  }, [menuPreferences]);
+
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(imageOverridesRef.current).forEach((url) => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, []);
+
+  const getImageSrc = React.useCallback(
+    (url?: string | null) => {
+      if (!url) return null;
+      return imageOverrides[url] ?? url;
+    },
+    [imageOverrides]
+  );
+
+  const matchCachedImage = React.useCallback(async (cache: Cache, url: string) => {
+    const corsRequest = new Request(url, { mode: 'cors' });
+    const cachedCors = await cache.match(corsRequest);
+    if (cachedCors) return cachedCors;
+    const noCorsRequest = new Request(url, { mode: 'no-cors' });
+    return cache.match(noCorsRequest);
+  }, []);
+
+  const warmImageCache = React.useCallback(async (urls: string[]) => {
+    if (typeof window === 'undefined' || !('caches' in window)) return;
+    if (urls.length === 0) return;
+    const cache = await caches.open(MENU_IMAGE_CACHE);
+    await Promise.all(
+      urls.map(async (url) => {
+        if (!url) return;
+        try {
+          const existing = await matchCachedImage(cache, url);
+          if (existing) return;
+          try {
+            await cache.add(new Request(url, { mode: 'cors' }));
+          } catch {
+            await cache.add(new Request(url, { mode: 'no-cors' }));
+          }
+        } catch {
+          // ignore cache failures
+        }
+      })
+    );
+  }, [matchCachedImage]);
+
+  const hydrateCachedImages = React.useCallback(
+    async (urls: string[]) => {
+      if (typeof window === 'undefined' || !('caches' in window)) return;
+      if (urls.length === 0) return;
+      const cache = await caches.open(MENU_IMAGE_CACHE);
+      const overrides: Record<string, string> = {};
+
+      await Promise.all(
+        urls.map(async (url) => {
+          if (!url || imageOverridesRef.current[url]) return;
+          try {
+            const match = await matchCachedImage(cache, url);
+            if (!match) return;
+            const blob = await match.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            overrides[url] = objectUrl;
+          } catch {
+            // ignore invalid cached entries
+          }
+        })
+      );
+
+      if (Object.keys(overrides).length > 0) {
+        setImageOverrides((prev) => ({ ...prev, ...overrides }));
+        setLoadedImages((prev) => new Set([...prev, ...Object.values(overrides)]));
+      }
+    },
+    [matchCachedImage]
+  );
+
   const normalizeValue = (value: unknown, fallback: string) => {
     if (typeof value === 'string') {
       const trimmed = value.trim();
@@ -831,12 +997,12 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const applyPreferences = React.useCallback(
     (preferences: MenuPreferences | null, items?: MenuItem[], options?: { merge?: boolean }) => {
       const mergedPreferences = options?.merge
-        ? { ...(menuPreferences ?? {}), ...(preferences ?? {}) }
+        ? { ...(menuPreferencesRef.current ?? {}), ...(preferences ?? {}) }
         : preferences;
 
       setMenuPreferences(mergedPreferences);
 
-      const sourceItems = items ?? products;
+      const sourceItems = items ?? productsRef.current;
       if (sourceItems.length > 0) {
         const { categories, groups } = buildMenuMeta(sourceItems, mergedPreferences);
         setMenuCategories(categories);
@@ -869,7 +1035,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         setPaperView(mergedPreferences.paperView);
       }
     },
-    [menuPreferences, products]
+    []
   );
 
   useEffect(() => {
@@ -917,12 +1083,53 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     }
   }, [darkMode]);
 
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    const requestCompanyId =
+      (getCompanyIdFromPath() ?? import.meta.env.VITE_COMPANY_ID) || null;
+    requestCompanyIdRef.current = requestCompanyId;
+    const cacheKey = getMenuCacheKey(requestCompanyId);
+    if (hydratedCacheKeyRef.current === cacheKey) return;
+    const cached = readMenuCache(cacheKey);
+    if (!cached) return;
+
+    hydratedCacheKeyRef.current = cacheKey;
+    hasHydratedFromCacheRef.current = true;
+    setMenuError(false);
+    setIsLoading(false);
+    setCompanyId(cached.companyId ?? requestCompanyId);
+    setCompanyName(
+      cached.companyName ??
+        cached.company?.name ??
+        cached.company?.companyName ??
+        cached.company?.company_name ??
+        null
+    );
+    companyDetailsRef.current = cached.company ?? null;
+    setProducts(cached.items);
+    applyPreferences(cached.preferences, cached.items);
+
+    const cachedImageUrls = collectImageUrls(
+      cached.items,
+      cached.preferences,
+      logoImgSrc
+    );
+    void hydrateCachedImages(cachedImageUrls);
+  }, [applyPreferences, hydrateCachedImages]);
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        setIsLoading(true);
+        if (!hasHydratedFromCacheRef.current) {
+          setIsLoading(true);
+        }
         setMenuError(false);
-        const requestCompanyId = getCompanyIdFromPath();
+        const requestCompanyId =
+          (requestCompanyIdRef.current ??
+            getCompanyIdFromPath() ??
+            import.meta.env.VITE_COMPANY_ID) ||
+          null;
+        requestCompanyIdRef.current = requestCompanyId;
         const path = requestCompanyId
           ? `${baseUrl}/public/customer-menu/${requestCompanyId}`
           : `${baseUrl}/public/customer-menu/${import.meta.env.VITE_COMPANY_ID || ''}`;
@@ -939,6 +1146,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         const resolvedCompanyId = data?.company?.id ?? null;
         setCompanyId(resolvedCompanyId);
         setCompanyName(data?.company?.name ?? data?.companyName ?? data?.company_name ?? null);
+        companyDetailsRef.current = data?.company ?? null;
         const preferences = getPreferences(data);
         const rawItems = Array.isArray(data)
           ? data
@@ -950,6 +1158,18 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         }));
         setProducts(items);
         applyPreferences(preferences, items);
+        const cacheKey = getMenuCacheKey(requestCompanyId);
+        writeMenuCache(cacheKey, {
+          version: MENU_CACHE_VERSION,
+          cachedAt: new Date().toISOString(),
+          companyId: resolvedCompanyId,
+          companyName: data?.company?.name ?? data?.companyName ?? data?.company_name ?? null,
+          company: data?.company ?? null,
+          preferences,
+          items,
+        });
+        const imageUrls = collectImageUrls(items, preferences, logoImgSrc);
+        void warmImageCache(imageUrls);
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
         console.error('Failed to fetch products:', error);
@@ -963,20 +1183,42 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       }
     };
     fetchProducts();
-  }, [baseUrl, trackMenuViewed]);
+  }, [baseUrl, trackMenuViewed, warmImageCache, applyPreferences]);
 
   useEffect(() => {
-    if (products.length === 0) {
+    if (typeof window === 'undefined') return;
+    if (products.length === 0) return;
+    const requestCompanyId =
+      (requestCompanyIdRef.current ??
+        getCompanyIdFromPath() ??
+        import.meta.env.VITE_COMPANY_ID) ||
+      null;
+    const cacheKey = getMenuCacheKey(requestCompanyId);
+    writeMenuCache(cacheKey, {
+      version: MENU_CACHE_VERSION,
+      cachedAt: new Date().toISOString(),
+      companyId,
+      companyName,
+      company: companyDetailsRef.current,
+      preferences: menuPreferences,
+      items: products,
+    });
+  }, [products, menuPreferences, companyId, companyName]);
+
+  const imageUrls = useMemo(
+    () => collectImageUrls(products, menuPreferences, logoImgSrc),
+    [products, menuPreferences]
+  );
+
+  useEffect(() => {
+    if (imageUrls.length === 0) {
       return;
     }
 
-    const imageUrls = products
-      .map((product) => product.image)
-      .filter((url): url is string => Boolean(url));
-
-    if (imageUrls.length === 0) return;
-
     const preloadImage = (url: string) => {
+      if (!url || url.startsWith('blob:')) {
+        return Promise.resolve(url);
+      }
       return new Promise((resolve) => {
         const img = new Image();
         img.src = url;
@@ -991,7 +1233,9 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     };
 
     Promise.all(imageUrls.map(preloadImage)).then(() => undefined);
-  }, [products]);
+    void warmImageCache(imageUrls);
+    void hydrateCachedImages(imageUrls);
+  }, [imageUrls, warmImageCache, hydrateCachedImages]);
 
   useEffect(() => {
     if (!customerOrdersMode || orderStage !== 'status' || !orderId) return;
@@ -1177,6 +1421,13 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     };
   }, []);
 
+  const resolvedLogoUrl = getImageSrc(logoUrl ?? logoImgSrc) ?? logoImgSrc;
+  const resolvedCoverPhotoUrl = getImageSrc(coverPhotoUrl);
+  const resolvedSelectedProductImage = getImageSrc(selectedProduct?.image ?? null);
+  const resolvedGalleryImage = selectedGallery
+    ? getImageSrc(selectedGallery.images[galleryImageIndex])
+    : null;
+
   return (
     <div
       className={`min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col ${
@@ -1215,9 +1466,9 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         )}
       </AnimatePresence>
 
-      {selectedProduct?.image && (
+      {resolvedSelectedProductImage && (
         <ImageViewer
-          src={selectedProduct.image}
+          src={resolvedSelectedProductImage}
           visible={imageViewerVisible}
           onClose={() => setImageViewerVisible(false)}
         />
@@ -1231,7 +1482,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           isCustomColor && !coverPhotoUrl
             ? { background: `linear-gradient(to right, ${activeTheme.header}, ${activeTheme.headerDarker})` }
             : coverPhotoUrl
-              ? { backgroundImage: `url(${coverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              ? { backgroundImage: `url(${resolvedCoverPhotoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
               : undefined
         }
       >
@@ -1246,7 +1497,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           />
         )}
         <div className="relative z-10 text-center">
-          <img src={logoUrl || logoImgSrc} alt="Brand logo" className="max-w-32 mx-auto" />
+          <img src={resolvedLogoUrl} alt="Brand logo" className="max-w-32 mx-auto" />
         </div>
       </div>
 
@@ -1358,6 +1609,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
                       <ProductCard
                         key={product.$id ?? product.id}
                         product={product}
+                        imageSrc={getImageSrc(product.image)}
                         expandOptions={expandOptions}
                         showPriceRange={showPriceRange}
                         paperView={paperView}
@@ -1430,6 +1682,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       <ProductDetailOverlay
         isOpen={detailVisible}
         product={selectedProduct}
+        imageSrc={resolvedSelectedProductImage}
         selectedVariant={selectedVariant}
         onVariantChange={setSelectedVariant}
         onClose={closeDetailOverlay}
@@ -1441,9 +1694,9 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         paperView={paperView}
       />
 
-      {selectedGallery && (
+      {selectedGallery && resolvedGalleryImage && (
         <ImageViewer
-          src={selectedGallery.images[galleryImageIndex]}
+          src={resolvedGalleryImage}
           visible={galleryImageViewerVisible}
           onClose={() => setGalleryImageViewerVisible(false)}
         />
@@ -1457,9 +1710,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         onOpenViewer={() => setGalleryImageViewerVisible(true)}
         activeTheme={activeTheme}
         isCustomColor={isCustomColor}
+        resolveImage={getImageSrc}
       />
 
-      {customerOrdersMode && orderStage === 'menu' && (hasOngoingOrder || orderItemsCount > 0) && (
+      {customerOrdersMode && orderStage === 'menu' && (
         <OrderFloatingButton
           totalItems={orderItemsCount}
           totalPrice={orderTotal}
@@ -1467,6 +1721,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           paperView={paperView}
           mode={hasOngoingOrder ? 'ongoing' : 'cart'}
           statusLabel={hasOngoingOrder ? ongoingStatus : null}
+          isHidden={!hasOngoingOrder && orderItemsCount <= 0}
         />
       )}
 

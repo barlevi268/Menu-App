@@ -4,6 +4,7 @@ import { buildDisplayPrice } from '../utils/pricing';
 
 type ProductCardProps = {
   product: MenuItem;
+  imageSrc?: string | null;
   expandOptions: boolean;
   showPriceRange: boolean;
   paperView: boolean;
@@ -13,12 +14,14 @@ type ProductCardProps = {
 
 const ProductCard = ({
   product,
+  imageSrc,
   expandOptions,
   showPriceRange,
   paperView,
   loadedImages,
   onSelect,
 }: ProductCardProps) => {
+  const resolvedImage = imageSrc ?? product.image ?? null;
   return (
     <div
       className="relative bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden mb-4 cursor-pointer transform transition-all hover:scale-[1.02] hover:shadow-lg"
@@ -76,12 +79,12 @@ const ProductCard = ({
             )}
           </div>
         </div>
-        {product.image ? (
+        {resolvedImage ? (
           <img
-            src={product.image}
+            src={resolvedImage}
             alt={product.name || 'product image'}
             className={`w-32 h-24 object-cover rounded-md flex-shrink-0 ml-3 transition-opacity duration-300 ${
-              loadedImages.has(product.image) ? 'opacity-100' : 'opacity-0'
+              loadedImages.has(resolvedImage) ? 'opacity-100' : 'opacity-0'
             }`}
           />
         ) : null}

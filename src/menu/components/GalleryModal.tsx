@@ -12,6 +12,7 @@ type GalleryModalProps = {
   onOpenViewer: () => void;
   activeTheme: any;
   isCustomColor: boolean;
+  resolveImage?: (url: string) => string | null;
 };
 
 const GalleryModal = ({
@@ -22,7 +23,9 @@ const GalleryModal = ({
   onOpenViewer,
   activeTheme,
   isCustomColor,
+  resolveImage,
 }: GalleryModalProps) => {
+  const resolveSrc = (url: string) => resolveImage?.(url) ?? url;
   return (
     <AnimatePresence mode="wait">
       {gallery && (
@@ -86,7 +89,7 @@ const GalleryModal = ({
                 >
                   <div className="w-full h-full flex-shrink-0">
                     <img
-                      src={gallery.images[imageIndex]}
+                      src={resolveSrc(gallery.images[imageIndex])}
                       alt={`Gallery ${imageIndex + 1}`}
                       className="w-full h-full object-contain cursor-zoom-in"
                       onClick={onOpenViewer}
@@ -96,7 +99,7 @@ const GalleryModal = ({
 
                   <div className="w-full h-full flex-shrink-0">
                     <img
-                      src={gallery.images[(imageIndex + 1) % gallery.images.length]}
+                      src={resolveSrc(gallery.images[(imageIndex + 1) % gallery.images.length])}
                       alt={`Gallery ${(imageIndex + 2) % gallery.images.length}`}
                       className="w-full h-full object-contain"
                       draggable={false}
@@ -144,7 +147,11 @@ const GalleryModal = ({
                           : undefined
                       }
                     >
-                      <img src={image} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                      <img
+                        src={resolveSrc(image)}
+                        alt={`Thumbnail ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
                     </button>
                   ))}
                 </div>
