@@ -10,7 +10,7 @@ import ProductDetailOverlay from './components/ProductDetailOverlay';
 import GalleryModal from './components/GalleryModal';
 import OrderFloatingButton from './components/OrderFloatingButton';
 import OrderSummaryPanel from './components/OrderSummaryPanel';
-import OrderDetailsPanel from './components/OrderDetailsPanel';
+import OrderDetailsPanel, { type DispatchOption } from './components/OrderDetailsPanel';
 import OrderSuccessPanel from './components/OrderSuccessPanel';
 import OrderStatusPanel from './components/OrderStatusPanel';
 import { useCustomerOrder } from './hooks/useCustomerOrder';
@@ -21,6 +21,57 @@ const logoImgSrc =
 const MENU_CACHE_VERSION = 1;
 const MENU_CACHE_PREFIX = 'menu-cache-v1';
 const MENU_IMAGE_CACHE = 'menu-images-v1';
+const DEFAULT_DISPATCH_OPTIONS: DispatchOption[] = [
+  { key: 'Pickup', label: 'Pickup', requiresAddress: false },
+  { key: 'Delivery', label: 'Delivery', requiresAddress: true },
+];
+
+const formatDispatchLabel = (value: string) =>
+  value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const parseDispatchOptions = (preferences: MenuPreferences | null): DispatchOption[] => {
+  const dispatchMap = preferences?.dispatchTyeps ?? preferences?.dispatchTypes;
+  if (!dispatchMap || typeof dispatchMap !== 'object') {
+    return DEFAULT_DISPATCH_OPTIONS;
+  }
+
+  const parsed = Object.entries(dispatchMap)
+    .filter(([, config]) => config?.enabled !== false)
+    .map(([key, config]) => {
+      const rawLocations = config?.locations;
+      const locationValues = Array.isArray(rawLocations)
+        ? rawLocations
+        : Object.values(rawLocations ?? {});
+      const presetLocations = locationValues
+        .map((location) => {
+          const name = typeof location?.name === 'string' ? location.name.trim() : '';
+          const address =
+            typeof location?.address === 'string' ? location.address.trim() : '';
+          if (!name || !address) return null;
+          return { name, address };
+        })
+        .filter((location): location is { name: string; address: string } => Boolean(location));
+
+      const normalizedKey = key.trim();
+      const requiresAddress =
+        presetLocations.length > 0 || normalizedKey.toLowerCase().includes('delivery');
+
+      return {
+        key: normalizedKey,
+        label: formatDispatchLabel(normalizedKey),
+        instructions: config?.instructions ?? null,
+        requiresAddress,
+        presetLocations,
+      };
+    })
+    .filter((option) => option.key.length > 0);
+
+  return parsed.length > 0 ? parsed : DEFAULT_DISPATCH_OPTIONS;
+};
 
 type MenuAppProps = {
   customerOrdersMode?: boolean;
@@ -211,6 +262,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const orderTotal = useMemo(
     () => orderState.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
     [orderState.items]
+  );
+  const dispatchOptions = useMemo(
+    () => parseDispatchOptions(menuPreferences),
+    [menuPreferences]
   );
   const orderItemsCount = useMemo(
     () => orderState.items.reduce((sum, item) => sum + item.quantity, 0),
@@ -447,12 +502,74 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     return parts.length > 0 ? parts.join(' | ') : undefined;
   };
 
-  const buildCustomerOrderLines = (items: OrderItem[]) =>
+  type DraftOrderLine = {
+    id?: string | null;
+    orderLineId?: string | null;
+    lineId?: string | null;
+    customerMenuItemId?: string | null;
+    menuItemId?: string | null;
+    itemId?: string | null;
+    quantity?: number | null;
+    notes?: string | null;
+  };
+
+  type CustomerOrderLinePayload = {
+    customerMenuItemId: string;
+    quantity: number;
+    notes?: string;
+    id?: string;
+  };
+
+  const normalizeNote = (value?: string | null) => (value ?? '').trim();
+
+  const buildCustomerOrderLines = (items: OrderItem[]): CustomerOrderLinePayload[] =>
     items.map((item) => ({
       customerMenuItemId: item.productId,
       quantity: item.quantity,
       notes: buildLineNotes(item),
     }));
+
+  const extractDraftLines = (draftData: Record<string, unknown> | null): DraftOrderLine[] => {
+    if (!draftData || typeof draftData !== 'object') return [];
+    const lines =
+      (draftData as { customerOrderLines?: DraftOrderLine[] }).customerOrderLines ??
+      (draftData as { orderLines?: DraftOrderLine[] }).orderLines ??
+      (draftData as { lines?: DraftOrderLine[] }).lines ??
+      (draftData as { items?: DraftOrderLine[] }).items ??
+      [];
+    return Array.isArray(lines) ? lines : [];
+  };
+
+  const attachDraftLineIds = (
+    lines: CustomerOrderLinePayload[],
+    draftLines: DraftOrderLine[]
+  ): CustomerOrderLinePayload[] => {
+    if (draftLines.length === 0) return lines;
+    const remaining = [...draftLines];
+
+    return lines.map((line) => {
+      const matchIndex = remaining.findIndex((draft) => {
+        const draftProductId =
+          draft.customerMenuItemId ?? draft.menuItemId ?? draft.itemId ?? null;
+        if (!draftProductId || draftProductId !== line.customerMenuItemId) return false;
+        const draftNotes = normalizeNote(draft.notes);
+        const lineNotes = normalizeNote(line.notes);
+        if (draftNotes !== lineNotes) return false;
+        if (typeof draft.quantity === 'number' && draft.quantity !== line.quantity) {
+          return false;
+        }
+        return true;
+      });
+
+      if (matchIndex < 0) return line;
+
+      const [matched] = remaining.splice(matchIndex, 1);
+      const lineId = matched?.id ?? matched?.orderLineId ?? matched?.lineId ?? null;
+      if (!lineId) return line;
+
+      return { ...line, id: lineId };
+    });
+  };
 
   const buildOrderNotes = () => {
     const trimmed = orderState.customer.notes.trim();
@@ -524,6 +641,40 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     orderState.customer.phone,
   ]);
 
+  useEffect(() => {
+    const selected = dispatchOptions.find(
+      (option) => option.key === orderState.customer.dispatchType
+    );
+    const fallback = dispatchOptions[0];
+    const currentAddress = (orderState.customer.dispatchInfo?.address ?? '').trim();
+
+    if (!selected) {
+      if (!fallback) return;
+      orderActions.updateCustomer({
+        dispatchType: fallback.key,
+        dispatchInfo: {
+          ...(orderState.customer.dispatchInfo ?? { address: '', notes: '' }),
+          address: fallback.presetLocations?.[0]?.address ?? '',
+        },
+      });
+      return;
+    }
+
+    if (selected.presetLocations && selected.presetLocations.length > 0) {
+      const hasMatchingPreset = selected.presetLocations.some(
+        (location) => location.address === currentAddress
+      );
+      if (!hasMatchingPreset) {
+        orderActions.updateCustomer({
+          dispatchInfo: {
+            ...(orderState.customer.dispatchInfo ?? { address: '', notes: '' }),
+            address: selected.presetLocations[0].address,
+          },
+        });
+      }
+    }
+  }, [dispatchOptions, orderActions, orderState.customer.dispatchInfo, orderState.customer.dispatchType]);
+
   const handleSubmitOrder = React.useCallback(async () => {
     if (isSubmittingOrder) return;
     setSubmitError(null);
@@ -539,13 +690,17 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     const customerName = orderState.customer.name.trim();
     const customerPhone = orderState.customer.phone.trim();
     const dispatchType = orderState.customer.dispatchType;
+    const selectedDispatchOption =
+      dispatchOptions.find((option) => option.key === dispatchType) ?? null;
+    const requiresDispatchAddress = Boolean(selectedDispatchOption?.requiresAddress);
     const dispatchInfo = orderState.customer.dispatchInfo ?? { address: '', notes: '' };
     const dispatchAddress = dispatchInfo.address.trim();
+    const dispatchNotes = dispatchInfo.notes.trim();
     if (!customerName || !customerPhone) {
       setSubmitError('Please enter your name and phone number.');
       return;
     }
-    if (dispatchType === 'Delivery' && !dispatchAddress) {
+    if (requiresDispatchAddress && !dispatchAddress) {
       setSubmitError('Please enter your delivery address.');
       return;
     }
@@ -567,10 +722,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         orderNotes,
       };
       draftPayload.dispatchType = dispatchType;
-      if (dispatchType === 'Delivery') {
+      if (requiresDispatchAddress) {
         draftPayload.dispatchInfo = {
           address: dispatchAddress,
-          notes: dispatchInfo.notes.trim() || undefined,
+          notes: dispatchNotes || undefined,
         };
       }
       if (reservationId) {
@@ -596,17 +751,20 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         throw new Error('Failed to create a draft order.');
       }
 
+      const draftLines = extractDraftLines(draftData ?? null);
+      const submitLines = attachDraftLineIds(customerOrderLines, draftLines);
+
       const submitPayload: Record<string, unknown> = {
-        customerOrderLines,
+        customerOrderLines: submitLines,
         status: 'received',
         totalAmount,
         orderNotes,
       };
       submitPayload.dispatchType = dispatchType;
-      if (dispatchType === 'Delivery') {
+      if (requiresDispatchAddress) {
         submitPayload.dispatchInfo = {
           address: dispatchAddress,
-          notes: dispatchInfo.notes.trim() || undefined,
+          notes: dispatchNotes || undefined,
         };
       }
       if (reservationId) {
@@ -657,6 +815,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     baseUrl,
     companyId,
     createReservationCustomer,
+    dispatchOptions,
     isSubmittingOrder,
     orderState.items,
     orderState.customer,
@@ -717,20 +876,24 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   );
 
   const clearLocalOrderState = React.useCallback(() => {
+    const defaultDispatch = dispatchOptions[0] ?? DEFAULT_DISPATCH_OPTIONS[0];
     orderActions.clearItems();
     orderActions.updateCustomer({
       name: '',
       phone: '',
       notes: '',
-      dispatchType: 'Pickup',
-      dispatchInfo: { address: '', notes: '' },
+      dispatchType: defaultDispatch.key,
+      dispatchInfo: {
+        address: defaultDispatch.presetLocations?.[0]?.address ?? '',
+        notes: '',
+      },
     });
     setOrderId(null);
     setPaymentLink(null);
     setStatusData(null);
     setOrderStage('menu');
     clearStoredActiveOrderId();
-  }, [orderActions, clearStoredActiveOrderId]);
+  }, [dispatchOptions, orderActions, clearStoredActiveOrderId]);
 
   const checkExistingOrderStatus = React.useCallback(
     async (existingId: string) => {
@@ -990,7 +1153,11 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       'darkMode' in value ||
       'showPriceRange' in value ||
       'expandOptions' in value ||
-      'paperView' in value
+      'paperView' in value ||
+      'dispatchTyeps' in value ||
+      'dispatchTypes' in value ||
+      'resturantAddress' in value ||
+      'resturantPhone' in value
     );
   };
 
@@ -1130,9 +1297,8 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
             import.meta.env.VITE_COMPANY_ID) ||
           null;
         requestCompanyIdRef.current = requestCompanyId;
-        const path = requestCompanyId
-          ? `${baseUrl}/public/customer-menu/${requestCompanyId}`
-          : `${baseUrl}/public/customer-menu/${import.meta.env.VITE_COMPANY_ID || ''}`;
+        const companyIdOrSlug = requestCompanyId ?? import.meta.env.VITE_COMPANY_ID ?? '';
+        const path = `${baseUrl}/public/customer-menu/${companyIdOrSlug}`;
         const res = await fetch(path, { headers: { Accept: 'application/json' } });
         if (!res.ok) {
           throw new Error(`Failed to fetch products: ${res.status}`);
@@ -1148,6 +1314,35 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         setCompanyName(data?.company?.name ?? data?.companyName ?? data?.company_name ?? null);
         companyDetailsRef.current = data?.company ?? null;
         const preferences = getPreferences(data);
+        let orderPreferences: MenuPreferences | null = null;
+
+        if (customerOrdersMode && companyIdOrSlug) {
+          const orderPrefsPath = `${baseUrl}/public/customer-orders/preferences/${companyIdOrSlug}`;
+          try {
+            const orderPrefsRes = await fetch(orderPrefsPath, {
+              headers: { Accept: 'application/json' },
+            });
+            if (orderPrefsRes.ok) {
+              const orderPrefsData = await orderPrefsRes.json();
+              orderPreferences =
+                orderPrefsData?.preferences ??
+                orderPrefsData?.customerOrdersPreferences ??
+                null;
+            } else {
+              console.warn('Failed to fetch order preferences:', orderPrefsRes.status);
+            }
+          } catch (prefsError) {
+            console.warn('Failed to fetch order preferences:', prefsError);
+          }
+        }
+
+        const mergedPreferences: MenuPreferences | null =
+          preferences || orderPreferences
+            ? {
+                ...(preferences ?? {}),
+                ...(orderPreferences ?? {}),
+              }
+            : null;
         const rawItems = Array.isArray(data)
           ? data
           : data?.items ?? data?.documents ?? data?.data ?? [];
@@ -1157,7 +1352,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           menuType: normalizeValue(item.menuType, 'menu'),
         }));
         setProducts(items);
-        applyPreferences(preferences, items);
+        applyPreferences(mergedPreferences, items);
         const cacheKey = getMenuCacheKey(requestCompanyId);
         writeMenuCache(cacheKey, {
           version: MENU_CACHE_VERSION,
@@ -1165,10 +1360,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           companyId: resolvedCompanyId,
           companyName: data?.company?.name ?? data?.companyName ?? data?.company_name ?? null,
           company: data?.company ?? null,
-          preferences,
+          preferences: mergedPreferences,
           items,
         });
-        const imageUrls = collectImageUrls(items, preferences, logoImgSrc);
+        const imageUrls = collectImageUrls(items, mergedPreferences, logoImgSrc);
         void warmImageCache(imageUrls);
         trackMenuViewed(resolvedCompanyId);
       } catch (error) {
@@ -1183,7 +1378,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       }
     };
     fetchProducts();
-  }, [baseUrl, trackMenuViewed, warmImageCache, applyPreferences]);
+  }, [baseUrl, trackMenuViewed, warmImageCache, applyPreferences, customerOrdersMode]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1741,6 +1936,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           <OrderDetailsPanel
             isOpen={orderStage === 'details'}
             customer={orderState.customer}
+            dispatchOptions={dispatchOptions}
             onUpdateCustomer={orderActions.updateCustomer}
             onBack={() => setOrderStage('summary')}
             onSendOrder={handleSubmitOrder}

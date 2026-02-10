@@ -3,9 +3,21 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 import type { CustomerDetails } from '../types';
 
+export type DispatchOption = {
+  key: string;
+  label: string;
+  instructions?: string | null;
+  requiresAddress?: boolean;
+  presetLocations?: Array<{
+    name: string;
+    address: string;
+  }>;
+};
+
 type OrderDetailsPanelProps = {
   isOpen: boolean;
   customer: CustomerDetails;
+  dispatchOptions: DispatchOption[];
   onUpdateCustomer: (patch: Partial<CustomerDetails>) => void;
   onBack: () => void;
   onSendOrder: () => void;
@@ -16,6 +28,7 @@ type OrderDetailsPanelProps = {
 const OrderDetailsPanel = ({
   isOpen,
   customer,
+  dispatchOptions,
   onUpdateCustomer,
   onBack,
   onSendOrder,
@@ -23,6 +36,13 @@ const OrderDetailsPanel = ({
   submitError,
 }: OrderDetailsPanelProps) => {
   const dispatchInfo = customer.dispatchInfo ?? { address: '', notes: '' };
+  const selectedDispatch =
+    dispatchOptions.find((option) => option.key === customer.dispatchType) ?? null;
+  const showAddress = Boolean(selectedDispatch?.requiresAddress);
+  const presetLocations = selectedDispatch?.presetLocations ?? [];
+  const selectedPresetName =
+    presetLocations.find((location) => location.address === dispatchInfo.address)?.name ?? '';
+  const presetSelectValue = selectedPresetName || presetLocations[0]?.name || '';
 
   return (
     <AnimatePresence mode="wait">
@@ -66,24 +86,40 @@ const OrderDetailsPanel = ({
                   Dispatch type
                 </label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {(['Pickup', 'Delivery'] as const).map((type) => {
-                    const isActive = customer.dispatchType === type;
+                  {dispatchOptions.map((option) => {
+                    const isActive = customer.dispatchType === option.key;
                     return (
                       <button
-                        key={type}
+                        key={option.key}
                         type="button"
-                        onClick={() => onUpdateCustomer({ dispatchType: type })}
+                        onClick={() =>
+                          onUpdateCustomer({
+                            dispatchType: option.key,
+                            dispatchInfo: {
+                              ...dispatchInfo,
+                              address:
+                                option.presetLocations && option.presetLocations.length > 0
+                                  ? option.presetLocations[0].address
+                                  : dispatchInfo.address,
+                            },
+                          })
+                        }
                         className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                           isActive
                             ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
                             : 'border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-200'
                         }`}
                       >
-                        {type}
+                        {option.label}
                       </button>
                     );
                   })}
                 </div>
+                {selectedDispatch?.instructions ? (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {selectedDispatch.instructions}
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Full name</label>
@@ -115,8 +151,37 @@ const OrderDetailsPanel = ({
                   rows={4}
                 />
               </div>
-              {customer.dispatchType === 'Delivery' && (
+              {showAddress && (
                 <>
+                  {presetLocations.length > 0 ? (
+                    <div>
+                      <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        Delivery location
+                      </label>
+                      <select
+                        value={presetSelectValue}
+                        onChange={(e) => {
+                          const selected = presetLocations.find(
+                            (location) => location.name === e.target.value
+                          );
+                          if (!selected) return;
+                          onUpdateCustomer({
+                            dispatchInfo: {
+                              ...dispatchInfo,
+                              address: selected.address,
+                            },
+                          });
+                        }}
+                        className="menu-input"
+                      >
+                        {presetLocations.map((location) => (
+                          <option key={`${location.name}-${location.address}`} value={location.name}>
+                            {location.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                   <div>
                     <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                       Address

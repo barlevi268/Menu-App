@@ -30,7 +30,10 @@ const safeParse = (value: string | null): CustomerOrderState | null => {
         phone: parsed.customer?.phone ?? '',
         notes: parsed.customer?.notes ?? '',
         dispatchType:
-          parsed.customer?.dispatchType === 'Delivery' ? 'Delivery' : 'Pickup',
+          typeof parsed.customer?.dispatchType === 'string' &&
+          parsed.customer.dispatchType.trim()
+            ? parsed.customer.dispatchType.trim()
+            : 'Pickup',
         dispatchInfo: {
           address: parsed.customer?.dispatchInfo?.address ?? '',
           notes: parsed.customer?.dispatchInfo?.notes ?? '',

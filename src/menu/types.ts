@@ -26,6 +26,36 @@ export type MenuPreferences = {
   showPriceRange?: boolean;
   expandOptions?: boolean;
   paperView?: boolean;
+  dispatchTyeps?: Record<
+    string,
+    {
+      enabled?: boolean;
+      instructions?: string | null;
+      locations?: Record<
+        string,
+        {
+          name?: string | null;
+          address?: string | null;
+        }
+      >;
+    }
+  >;
+  dispatchTypes?: Record<
+    string,
+    {
+      enabled?: boolean;
+      instructions?: string | null;
+      locations?: Record<
+        string,
+        {
+          name?: string | null;
+          address?: string | null;
+        }
+      >;
+    }
+  >;
+  resturantAddress?: string | null;
+  resturantPhone?: string | null;
 };
 
 export type MenuItemOption = {
@@ -68,7 +98,7 @@ export type CustomerDetails = {
   name: string;
   phone: string;
   notes: string;
-  dispatchType: 'Pickup' | 'Delivery';
+  dispatchType: string;
   dispatchInfo: {
     address: string;
     notes: string;
