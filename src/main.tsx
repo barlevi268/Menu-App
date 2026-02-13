@@ -37,6 +37,7 @@ function App() {
       <Route path="/order/:companyId" element={<MenuApp customerOrdersMode />} />
       <Route path="/order/status/:orderId" element={<MenuApp customerOrdersMode />} />
       <Route path="/order/:companyId/status/:orderId" element={<MenuApp customerOrdersMode />} />
+      <Route path="/o/:orderId" element={<MenuApp customerOrdersMode />} />
       {/* Backup Route since some links use it */}
       <Route path="/" element={<MenuApp />} />
       <Route path="/reservations" element={<ReservationApp />} />

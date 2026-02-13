@@ -33,6 +33,11 @@ const formatDispatchLabel = (value: string) =>
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
+const getDispatchDisplayLabel = (key: string) => {
+  if (key.trim().toLowerCase() === 'presetdelivery') return 'Delivery';
+  return formatDispatchLabel(key);
+};
+
 const parseDispatchOptions = (preferences: MenuPreferences | null): DispatchOption[] => {
   const dispatchMap = preferences?.dispatchTyeps ?? preferences?.dispatchTypes;
   if (!dispatchMap || typeof dispatchMap !== 'object') {
@@ -62,7 +67,7 @@ const parseDispatchOptions = (preferences: MenuPreferences | null): DispatchOpti
 
       return {
         key: normalizedKey,
-        label: formatDispatchLabel(normalizedKey),
+        label: getDispatchDisplayLabel(normalizedKey),
         instructions: config?.instructions ?? null,
         requiresAddress,
         presetLocations,
@@ -149,6 +154,7 @@ const getCompanyIdFromPath = () => {
 
   const segments = window.location.pathname.split('/').filter(Boolean);
   if (paramId) return paramId;
+  if (segments[0] === 'o') return null;
   if (segments[0] === 'menu' || segments[0] === 'order') {
     if (segments[1] === 'status') return null;
     return segments[1];
@@ -158,6 +164,7 @@ const getCompanyIdFromPath = () => {
 
 const getOrderIdFromPath = () => {
   const segments = window.location.pathname.split('/').filter(Boolean);
+  if (segments[0] === 'o') return segments[1] || null;
   const statusIndex = segments.indexOf('status');
   if (statusIndex === -1) return null;
   return segments[statusIndex + 1] || null;
@@ -277,14 +284,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
   const statusLink = useMemo(() => {
     if (!orderId || typeof window === 'undefined') return null;
     const url = new URL(window.location.href);
-    if (companyId) {
-      url.pathname = `/order/${companyId}/status/${orderId}`;
-    } else {
-      url.pathname = `/order/status/${orderId}`;
-    }
+    url.pathname = `/o/${orderId}`;
     url.search = '';
     return url.toString();
-  }, [orderId, companyId]);
+  }, [orderId]);
 
   const getStoredActiveOrderId = React.useCallback(() => {
     if (typeof window === 'undefined') return null;
@@ -504,11 +507,15 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
 
   type DraftOrderLine = {
     id?: string | null;
+    customerOrderLineId?: string | null;
+    customer_order_line_id?: string | null;
     orderLineId?: string | null;
     lineId?: string | null;
     customerMenuItemId?: string | null;
+    customerMenuId?: string | null;
     menuItemId?: string | null;
     itemId?: string | null;
+    customerMenuItem?: { id?: string | null } | null;
     quantity?: number | null;
     notes?: string | null;
   };
@@ -517,7 +524,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     customerMenuItemId: string;
     quantity: number;
     notes?: string;
-    id?: string;
+    customerOrderLineId?: string;
   };
 
   const normalizeNote = (value?: string | null) => (value ?? '').trim();
@@ -535,9 +542,37 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       (draftData as { customerOrderLines?: DraftOrderLine[] }).customerOrderLines ??
       (draftData as { orderLines?: DraftOrderLine[] }).orderLines ??
       (draftData as { lines?: DraftOrderLine[] }).lines ??
+      (draftData as { customerOrder?: { customerOrderLines?: DraftOrderLine[] } }).customerOrder
+        ?.customerOrderLines ??
+      (draftData as { order?: { customerOrderLines?: DraftOrderLine[] } }).order
+        ?.customerOrderLines ??
+      (draftData as { data?: { customerOrderLines?: DraftOrderLine[] } }).data
+        ?.customerOrderLines ??
       (draftData as { items?: DraftOrderLine[] }).items ??
       [];
     return Array.isArray(lines) ? lines : [];
+  };
+
+  const getDraftLineId = (line: DraftOrderLine): string | null => {
+    return (
+      line.customerOrderLineId ??
+      line.customer_order_line_id ??
+      line.id ??
+      line.orderLineId ??
+      line.lineId ??
+      null
+    );
+  };
+
+  const getDraftProductId = (line: DraftOrderLine): string | null => {
+    return (
+      line.customerMenuItemId ??
+      line.customerMenuId ??
+      line.menuItemId ??
+      line.itemId ??
+      line.customerMenuItem?.id ??
+      null
+    );
   };
 
   const attachDraftLineIds = (
@@ -545,12 +580,23 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     draftLines: DraftOrderLine[]
   ): CustomerOrderLinePayload[] => {
     if (draftLines.length === 0) return lines;
-    const remaining = [...draftLines];
+    const available = [...draftLines];
 
-    return lines.map((line) => {
-      const matchIndex = remaining.findIndex((draft) => {
-        const draftProductId =
-          draft.customerMenuItemId ?? draft.menuItemId ?? draft.itemId ?? null;
+    const consumeMatch = (
+      line: CustomerOrderLinePayload,
+      predicate: (draft: DraftOrderLine) => boolean
+    ) => {
+      const matchIndex = available.findIndex(predicate);
+      if (matchIndex < 0) return line;
+      const [matched] = available.splice(matchIndex, 1);
+      const lineId = matched ? getDraftLineId(matched) : null;
+      if (!lineId) return line;
+      return { ...line, customerOrderLineId: lineId };
+    };
+
+    const strictMatched = lines.map((line) =>
+      consumeMatch(line, (draft) => {
+        const draftProductId = getDraftProductId(draft);
         if (!draftProductId || draftProductId !== line.customerMenuItemId) return false;
         const draftNotes = normalizeNote(draft.notes);
         const lineNotes = normalizeNote(line.notes);
@@ -559,15 +605,27 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
           return false;
         }
         return true;
+      })
+    );
+
+    const relaxedMatched = strictMatched.map((line) => {
+      if (line.customerOrderLineId) return line;
+      return consumeMatch(line, (draft) => {
+        const draftProductId = getDraftProductId(draft);
+        if (!draftProductId || draftProductId !== line.customerMenuItemId) return false;
+        if (typeof draft.quantity === 'number' && draft.quantity !== line.quantity) {
+          return false;
+        }
+        return true;
       });
+    });
 
-      if (matchIndex < 0) return line;
-
-      const [matched] = remaining.splice(matchIndex, 1);
-      const lineId = matched?.id ?? matched?.orderLineId ?? matched?.lineId ?? null;
-      if (!lineId) return line;
-
-      return { ...line, id: lineId };
+    return relaxedMatched.map((line, index) => {
+      if (line.customerOrderLineId) return line;
+      const fallback = draftLines[index];
+      const fallbackId = fallback ? getDraftLineId(fallback) : null;
+      if (!fallbackId) return line;
+      return { ...line, customerOrderLineId: fallbackId };
     });
   };
 
