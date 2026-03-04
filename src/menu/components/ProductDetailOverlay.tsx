@@ -1,8 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Minus, Plus, X } from 'lucide-react';
-import type { MenuItem, MenuItemOption, OrderItemDraft } from '../types';
-import { buildDisplayPrice, formatPrice, getOptionPrice, getRowBasePrice } from '../utils/pricing';
+import type {
+  MenuAddOnGroup,
+  MenuAddOnItem,
+  MenuItem,
+  MenuItemOption,
+  OrderItemDraft,
+} from '../types';
+import {
+  buildDisplayPrice,
+  formatPrice,
+  getOptionPrice,
+  getRowBasePrice,
+  parsePriceValue,
+} from '../utils/pricing';
 
 type ProductDetailOverlayProps = {
   isOpen: boolean;
@@ -36,6 +48,10 @@ const ProductDetailOverlay = ({
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState('');
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(0);
+  const [selectedAddOnsByGroup, setSelectedAddOnsByGroup] = useState<Record<string, string[]>>(
+    {}
+  );
+  const [addOnValidationError, setAddOnValidationError] = useState<string | null>(null);
   const [isMorphing, setIsMorphing] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -43,6 +59,12 @@ const ProductDetailOverlay = ({
   const morphTimeoutsRef = useRef<number[]>([]);
   const isAnimatingRef = useRef(false);
   const isMountedRef = useRef(true);
+
+  const normalizeId = (value: unknown) => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value);
+    return '';
+  };
 
   const options = useMemo(() => product?.options ?? [], [product]);
   const variants = useMemo(
@@ -62,6 +84,110 @@ const ProductDetailOverlay = ({
     return options.filter((opt) => opt.variant === selectedVariant);
   }, [options, selectedVariant]);
 
+  type ResolvedAddOnItem = {
+    id: string;
+    name: string;
+    price: number;
+    sequence: number;
+  };
+
+  type ResolvedAddOnGroup = {
+    id: string;
+    name: string;
+    sequence: number;
+    required: boolean;
+    minSelect: number;
+    maxSelect?: number;
+    items: ResolvedAddOnItem[];
+  };
+
+  const resolveAddOnItems = (itemsRaw: unknown): ResolvedAddOnItem[] => {
+    if (!Array.isArray(itemsRaw)) return [];
+    return itemsRaw
+      .map((raw) => {
+        if (!raw || typeof raw !== 'object') return null;
+        const item = raw as MenuAddOnItem;
+        const id = normalizeId(item.id ?? item.$id);
+        if (!id) return null;
+        if (item.outofstock) return null;
+        return {
+          id,
+          name: item.name?.trim() || 'Add-on',
+          price: parsePriceValue(item.price ?? 0),
+          sequence: typeof item.sequence === 'number' ? item.sequence : 0,
+        };
+      })
+      .filter((entry): entry is ResolvedAddOnItem => Boolean(entry))
+      .sort((a, b) => a.sequence - b.sequence);
+  };
+
+  const addOnGroups = useMemo<ResolvedAddOnGroup[]>(() => {
+    if (!product) return [];
+    const groupsById = new Map<string, ResolvedAddOnGroup>();
+
+    const upsertGroup = (
+      groupIdRaw: unknown,
+      groupLike: MenuAddOnGroup | null | undefined,
+      sequence: number
+    ) => {
+      const groupId = normalizeId(groupIdRaw ?? groupLike?.id);
+      if (!groupId) return;
+      const groupName = groupLike?.groupName ?? groupLike?.name ?? 'Add-ons';
+      const items = resolveAddOnItems(
+        groupLike?.addOnItems ?? groupLike?.add_on_items ?? []
+      );
+      const minSelect = typeof groupLike?.minSelect === 'number' ? groupLike.minSelect : 0;
+      const required = Boolean(groupLike?.required) || minSelect > 0;
+      const maxSelect =
+        typeof groupLike?.maxSelect === 'number' && groupLike.maxSelect > 0
+          ? groupLike.maxSelect
+          : undefined;
+      const existing = groupsById.get(groupId);
+
+      if (!existing) {
+        groupsById.set(groupId, {
+          id: groupId,
+          name: groupName,
+          sequence,
+          required,
+          minSelect: required ? Math.max(1, minSelect || 1) : minSelect,
+          maxSelect,
+          items,
+        });
+        return;
+      }
+
+      const mergedItems = [...existing.items, ...items].filter((entry, index, arr) => {
+        return arr.findIndex((candidate) => candidate.id === entry.id) === index;
+      });
+      groupsById.set(groupId, {
+        ...existing,
+        name: existing.name || groupName,
+        sequence: Math.min(existing.sequence, sequence),
+        required: existing.required || required,
+        minSelect: Math.max(existing.minSelect, required ? Math.max(1, minSelect || 1) : minSelect),
+        maxSelect: existing.maxSelect ?? maxSelect,
+        items: mergedItems.sort((a, b) => a.sequence - b.sequence),
+      });
+    };
+
+    (product.addOnGroups ?? []).forEach((group, index) => {
+      upsertGroup(group.id, group, typeof group.sequence === 'number' ? group.sequence : index);
+    });
+
+    (product.addOnGroupAssignments ?? []).forEach((assignment, index) => {
+      upsertGroup(
+        assignment.addOnGroupId ?? assignment.add_on_group_id ?? assignment.addOnGroup?.id,
+        assignment.addOnGroup ?? null,
+        typeof assignment.sequence === 'number' ? assignment.sequence : index
+      );
+    });
+
+    return Array.from(groupsById.values())
+      .filter((group) => group.items.length > 0)
+      .sort((a, b) => a.sequence - b.sequence);
+  }, [product]);
+
   useEffect(() => {
     setSelectedOptionIndex(0);
   }, [selectedVariant, product?.$id, product?.id]);
@@ -71,8 +197,16 @@ const ProductDetailOverlay = ({
       setQuantity(1);
       setNote('');
       setSelectedOptionIndex(0);
+      setSelectedAddOnsByGroup({});
+      setAddOnValidationError(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedAddOnsByGroup({});
+    setAddOnValidationError(null);
+  }, [isOpen, product?.id, product?.$id]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -105,9 +239,37 @@ const ProductDetailOverlay = ({
 
   const selectedOption: MenuItemOption | null =
     filteredOptions[selectedOptionIndex] ?? null;
-  const unitPrice = selectedOption
+  const baseUnitPrice = selectedOption
     ? getOptionPrice(selectedOption)
     : getRowBasePrice(product);
+  const selectedAddOns = addOnGroups.flatMap((group) => {
+    const selectedIds = selectedAddOnsByGroup[group.id] ?? [];
+    return selectedIds
+      .map((id) => {
+        const selected = group.items.find((item) => item.id === id);
+        if (!selected) return null;
+        return {
+          groupId: group.id,
+          groupName: group.name,
+          itemId: selected.id,
+          itemName: selected.name,
+          price: selected.price,
+        };
+      })
+      .filter(
+        (
+          entry
+        ): entry is {
+          groupId: string;
+          groupName: string;
+          itemId: string;
+          itemName: string;
+          price: number;
+        } => Boolean(entry)
+      );
+  });
+  const addOnTotal = selectedAddOns.reduce((sum, entry) => sum + entry.price, 0);
+  const unitPrice = baseUnitPrice + addOnTotal;
   const lineTotal = unitPrice * quantity;
 
   const pushTimeout = (cb: () => void, delay: number) => {
@@ -327,14 +489,51 @@ const ProductDetailOverlay = ({
     }
   };
 
+  const toggleAddOnSelection = (group: ResolvedAddOnGroup, itemId: string) => {
+    setAddOnValidationError(null);
+    setSelectedAddOnsByGroup((prev) => {
+      const current = prev[group.id] ?? [];
+      const isSelected = current.includes(itemId);
+      if (isSelected) {
+        return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
+      }
+      if (group.maxSelect === 1) {
+        return { ...prev, [group.id]: [itemId] };
+      }
+      if (group.maxSelect && current.length >= group.maxSelect) {
+        return prev;
+      }
+      return { ...prev, [group.id]: [...current, itemId] };
+    });
+  };
+
+  const getAddOnValidationError = () => {
+    for (const group of addOnGroups) {
+      const selectedCount = (selectedAddOnsByGroup[group.id] ?? []).length;
+      const minRequired = group.required ? Math.max(1, group.minSelect || 1) : group.minSelect;
+      if (selectedCount < minRequired) {
+        return `Please select at least ${minRequired} option${
+          minRequired > 1 ? 's' : ''
+        } from ${group.name}.`;
+      }
+    }
+    return null;
+  };
+
   const handleAdd = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     if (!onAddToOrder) return;
+    const addOnError = getAddOnValidationError();
+    if (addOnError) {
+      setAddOnValidationError(addOnError);
+      return;
+    }
     const draft = {
       productId: String(product.$id ?? product.id ?? product.name ?? 'item'),
       name: product.name ?? 'Item',
       image: product.image ?? null,
       variant: selectedVariant ?? null,
       optionName: selectedOption?.name ?? null,
+      selectedAddOns,
       note,
       quantity,
       unitPrice,
@@ -369,7 +568,7 @@ const ProductDetailOverlay = ({
           <motion.div
             role="dialog"
             aria-modal="true"
-            className={`${paperView ? 'bg-[#FFFBF7] dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800'} menu-detail-panel max-w-[450px]`}
+            className={`${paperView ? 'bg-[#FFFBF7] dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800'} menu-detail-panel min-h-[80vh] max-w-[450px]`}
             initial={{ y: '100%', opacity: 0 }}
             animate={{ y: 0, opacity: isMorphing ? 0 : 1 }}
             exit={{ y: '100%', opacity: 0 }}
@@ -549,6 +748,61 @@ const ProductDetailOverlay = ({
 
                 {customerOrdersMode && (
                   <div className="mt-6 space-y-4">
+                    {addOnGroups.length > 0 ? (
+                      <div className="space-y-4">
+                        {addOnGroups.map((group) => {
+                          const selectedIds = selectedAddOnsByGroup[group.id] ?? [];
+                          const minLabel = group.required
+                            ? `Required · min ${Math.max(1, group.minSelect || 1)}`
+                            : group.minSelect > 0
+                            ? `Optional · min ${group.minSelect}`
+                            : 'Optional';
+                          return (
+                            <div key={group.id} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                  {group.name}
+                                </label>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  {minLabel}
+                                  {group.maxSelect ? ` · max ${group.maxSelect}` : ''}
+                                </span>
+                              </div>
+                              <div className="space-y-2">
+                                {group.items.map((addOnItem) => {
+                                  const isSelected = selectedIds.includes(addOnItem.id);
+                                  return (
+                                    <button
+                                      key={addOnItem.id}
+                                      type="button"
+                                      onClick={() => toggleAddOnSelection(group, addOnItem.id)}
+                                      className={`w-full flex items-center justify-between rounded-lg border px-3 py-3 text-sm transition ${
+                                        isSelected
+                                          ? 'border-gray-800 dark:border-gray-200 bg-gray-100 dark:bg-gray-700'
+                                          : 'border-gray-200 dark:border-gray-700'
+                                      }`}
+                                    >
+                                      <span className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-500">
+                                          {isSelected ? '●' : '○'}
+                                        </span>
+                                        <span className="font-semibold text-gray-700 dark:text-gray-200">
+                                          {addOnItem.name}
+                                        </span>
+                                      </span>                                      
+                                      <span className={`text-gray-700 dark:text-gray-300 ${addOnItem.price === 0 && 'hidden'}`}>
+                                        + {formatPrice(addOnItem.price, { paperView })}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
                     {/* <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <button
@@ -576,6 +830,10 @@ const ProductDetailOverlay = ({
                         </div>
                       </div>
                     </div> */}
+
+                    {addOnValidationError ? (
+                      <p className="text-sm text-red-500">{addOnValidationError}</p>
+                    ) : null}
 
                     <div>
                       <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">

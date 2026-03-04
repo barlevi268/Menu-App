@@ -19,7 +19,7 @@
 
   .menu-sheet-md {
     @apply max-w-xl;
-  }
+  }`
 
   .menu-sheet-lg {
     @apply max-w-2xl;
@@ -172,7 +172,7 @@
   }
 
   .menu-detail-image {
-    @apply w-full h-72 object-cover rounded-t-2xl cursor-zoom-in;
+    @apply w-full h-56 object-cover rounded-t-2xl cursor-zoom-in;
   }
 
   .menu-detail-close {

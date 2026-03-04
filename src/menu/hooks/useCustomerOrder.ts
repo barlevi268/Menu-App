@@ -18,13 +18,40 @@ const EMPTY_STATE: CustomerOrderState = {
   updatedAt: null,
 };
 
+const normalizeSelectedAddOns = (value: unknown): OrderItem['selectedAddOns'] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const item = entry as Partial<NonNullable<OrderItem['selectedAddOns']>[number]>;
+      const groupId = typeof item.groupId === 'string' ? item.groupId : '';
+      const itemId = typeof item.itemId === 'string' ? item.itemId : '';
+      if (!groupId || !itemId) return null;
+      return {
+        groupId,
+        groupName: typeof item.groupName === 'string' ? item.groupName : '',
+        itemId,
+        itemName: typeof item.itemName === 'string' ? item.itemName : '',
+        price: typeof item.price === 'number' ? item.price : 0,
+      };
+    })
+    .filter((entry): entry is NonNullable<OrderItem['selectedAddOns']>[number] => Boolean(entry));
+};
+
 const safeParse = (value: string | null): CustomerOrderState | null => {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as CustomerOrderState;
     if (!parsed || typeof parsed !== 'object') return null;
     return {
-      items: Array.isArray(parsed.items) ? parsed.items : [],
+      items: Array.isArray(parsed.items)
+        ? parsed.items.map((item) => ({
+            ...item,
+            selectedAddOns: normalizeSelectedAddOns(
+              (item as Partial<OrderItem>)?.selectedAddOns
+            ),
+          }))
+        : [],
       customer: {
         name: parsed.customer?.name ?? '',
         phone: parsed.customer?.phone ?? '',
@@ -59,12 +86,19 @@ const createLineItemId = () => {
   return `item_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
+const buildAddOnSignature = (item: Pick<OrderItem, 'selectedAddOns'>) =>
+  [...(item.selectedAddOns ?? [])]
+    .sort((a, b) => `${a.groupId}:${a.itemId}`.localeCompare(`${b.groupId}:${b.itemId}`))
+    .map((entry) => `${entry.groupId}:${entry.itemId}`)
+    .join('|');
+
 const isSameItem = (a: OrderItem, b: OrderItemDraft) => {
   return (
     a.productId === b.productId &&
     (a.optionName ?? '') === (b.optionName ?? '') &&
     (a.variant ?? '') === (b.variant ?? '') &&
-    (a.note ?? '') === (b.note ?? '')
+    (a.note ?? '') === (b.note ?? '') &&
+    buildAddOnSignature(a) === buildAddOnSignature(b)
   );
 };
 
@@ -143,6 +177,7 @@ export const useCustomerOrder = (companyId?: string | null) => {
               image: draft.image ?? null,
               variant: draft.variant ?? null,
               optionName: draft.optionName ?? null,
+              selectedAddOns: normalizeSelectedAddOns(draft.selectedAddOns),
               note: draft.note ?? '',
               quantity: draft.quantity,
               unitPrice: draft.unitPrice,

@@ -82,6 +82,14 @@ const OrderSummaryPanel = ({
                             {[item.variant, item.optionName].filter(Boolean).join(' · ')}
                           </p>
                         ) : null}
+                        {(item.selectedAddOns ?? []).length > 0 ? (
+                          <p className="text-sm text-gray-500 mt-1">
+                            Add-ons:{' '}
+                            {(item.selectedAddOns ?? [])
+                              .map((entry) => entry.itemName)
+                              .join(', ')}
+                          </p>
+                        ) : null}
                         {item.note ? (
                           <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Note: {item.note}</p>
                         ) : null}

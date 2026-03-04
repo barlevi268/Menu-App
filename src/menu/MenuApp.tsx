@@ -2,7 +2,17 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { AnimatePresence, motion } from 'framer-motion';
 import { Pointer, Settings } from 'lucide-react';
 import themeClasses from './themeClasses';
-import type { CategoryGroup, MenuCategory, MenuItem, MenuPreferences, OrderItem, OrderItemDraft } from './types';
+import type {
+  CategoryGroup,
+  MenuAddOnGroup,
+  MenuAddOnGroupAssignment,
+  MenuAddOnItem,
+  MenuCategory,
+  MenuItem,
+  MenuPreferences,
+  OrderItem,
+  OrderItemDraft,
+} from './types';
 import ImageViewer from './components/ImageViewer';
 import ProductCard from './components/ProductCard';
 import ProductLine from './components/ProductLine';
@@ -501,6 +511,22 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     const parts: string[] = [];
     if (item.variant) parts.push(`Variant: ${item.variant}`);
     if (item.optionName) parts.push(`Option: ${item.optionName}`);
+    if ((item.selectedAddOns ?? []).length > 0) {
+      const byGroup = (item.selectedAddOns ?? []).reduce<Record<string, string[]>>(
+        (acc, addOn) => {
+          if (!acc[addOn.groupName]) {
+            acc[addOn.groupName] = [];
+          }
+          acc[addOn.groupName].push(addOn.itemName);
+          return acc;
+        },
+        {}
+      );
+      const addOnSummary = Object.entries(byGroup)
+        .map(([groupName, itemNames]) => `${groupName}: ${itemNames.join(', ')}`)
+        .join('; ');
+      if (addOnSummary) parts.push(`Add-ons: ${addOnSummary}`);
+    }
     if (item.note) parts.push(item.note);
     return parts.length > 0 ? parts.join(' | ') : undefined;
   };
@@ -1103,6 +1129,163 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
+  const normalizeId = (value: unknown) => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value);
+    return '';
+  };
+
+  const normalizeGroupName = (value: unknown, fallback = 'Add-ons') => {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    return fallback;
+  };
+
+  const normalizeAddOnItem = (raw: any): MenuAddOnItem | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = normalizeId(raw.id ?? raw.$id);
+    if (!id) return null;
+    return {
+      ...raw,
+      id,
+      name: typeof raw.name === 'string' ? raw.name : 'Add-on',
+      price: raw.price ?? 0,
+      outofstock: Boolean(raw.outofstock),
+      sequence: typeof raw.sequence === 'number' ? raw.sequence : 0,
+      addOnGroupId: normalizeId(raw.addOnGroupId ?? raw.add_on_group_id) || undefined,
+    };
+  };
+
+  const normalizeAddOnGroup = (raw: any): MenuAddOnGroup | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = normalizeId(raw.id);
+    if (!id) return null;
+    const nestedItemsRaw = raw.addOnItems ?? raw.add_on_items ?? raw.items ?? [];
+    const nestedItems = (Array.isArray(nestedItemsRaw) ? nestedItemsRaw : [])
+      .map((item) => normalizeAddOnItem(item))
+      .filter((item): item is MenuAddOnItem => Boolean(item))
+      .filter((item) => !item.outofstock)
+      .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+
+    return {
+      ...raw,
+      id,
+      groupName: normalizeGroupName(raw.groupName ?? raw.name),
+      sequence: typeof raw.sequence === 'number' ? raw.sequence : 0,
+      minSelect: typeof raw.minSelect === 'number' ? raw.minSelect : undefined,
+      maxSelect: typeof raw.maxSelect === 'number' ? raw.maxSelect : undefined,
+      required: typeof raw.required === 'boolean' ? raw.required : undefined,
+      addOnItems: nestedItems,
+    };
+  };
+
+  const normalizeItemsWithAddOns = (data: any, rawItemsInput: any[]): MenuItem[] => {
+    const groupsSource =
+      data?.addOnGroups ?? data?.addonGroups ?? data?.add_on_groups ?? data?.groups ?? [];
+    const addOnItemsSource =
+      data?.addOnItems ?? data?.addonItems ?? data?.add_on_items ?? data?.groupedAddOnItems ?? [];
+    const groupsRaw = Array.isArray(groupsSource) ? groupsSource : Object.values(groupsSource ?? {});
+    const addOnItemsRaw = Array.isArray(addOnItemsSource)
+      ? addOnItemsSource
+      : Object.values(addOnItemsSource ?? {}).flatMap((entry) =>
+          Array.isArray(entry) ? entry : [entry]
+        );
+
+    const groups = groupsRaw
+      .map((group) => normalizeAddOnGroup(group))
+      .filter((group): group is MenuAddOnGroup => Boolean(group));
+
+    const addOnItems = addOnItemsRaw
+      .map((item) => normalizeAddOnItem(item))
+      .filter((item): item is MenuAddOnItem => Boolean(item))
+      .filter((item) => !item.outofstock);
+
+    const itemsByGroup = new Map<string, MenuAddOnItem[]>();
+    addOnItems.forEach((item) => {
+      const groupId = normalizeId(item.addOnGroupId);
+      if (!groupId) return;
+      if (!itemsByGroup.has(groupId)) itemsByGroup.set(groupId, []);
+      itemsByGroup.get(groupId)?.push(item);
+    });
+
+    const groupsById = new Map<string, MenuAddOnGroup>();
+    groups.forEach((group) => {
+      const groupId = normalizeId(group.id);
+      if (!groupId) return;
+      const catalogItems = [...(itemsByGroup.get(groupId) ?? []), ...(group.addOnItems ?? [])]
+        .filter((entry, index, arr) => {
+          const id = normalizeId(entry.id);
+          if (!id) return false;
+          return arr.findIndex((candidate) => normalizeId(candidate.id) === id) === index;
+        })
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      groupsById.set(groupId, {
+        ...group,
+        id: groupId,
+        addOnItems: catalogItems,
+      });
+    });
+
+    return rawItemsInput
+      .filter((rawItem) => rawItem?.type !== 'add_on')
+      .map((rawItem) => {
+      const assignmentRaw = rawItem?.addOnGroupAssignments ?? rawItem?.addOnGroups ?? [];
+      const assignments = (Array.isArray(assignmentRaw) ? assignmentRaw : [])
+        .map((assignment: any, index: number): MenuAddOnGroupAssignment | null => {
+          const groupId = normalizeId(
+            assignment?.addOnGroupId ??
+              assignment?.add_on_group_id ??
+              assignment?.addOnGroup?.id ??
+              assignment?.id
+          );
+          if (!groupId) return null;
+          const groupFromAssignment = normalizeAddOnGroup(assignment?.addOnGroup ?? assignment);
+          const resolvedGroup =
+            (groupFromAssignment
+              ? {
+                  ...groupFromAssignment,
+                  id: groupId,
+                  addOnItems:
+                    (groupFromAssignment.addOnItems ?? []).length > 0
+                      ? groupFromAssignment.addOnItems
+                      : groupsById.get(groupId)?.addOnItems ?? [],
+                }
+              : groupsById.get(groupId)) ?? null;
+
+          return {
+            id: normalizeId(assignment?.id) || undefined,
+            addOnGroupId: groupId,
+            sequence:
+              typeof assignment?.sequence === 'number' ? assignment.sequence : index,
+            addOnGroup: resolvedGroup,
+          };
+        })
+        .filter(
+          (assignment): assignment is MenuAddOnGroupAssignment => Boolean(assignment)
+        )
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+
+      const addOnGroups = assignments
+        .map((assignment) => assignment.addOnGroup)
+        .filter((group): group is MenuAddOnGroup => Boolean(group))
+        .map((group) => ({
+          ...group,
+          id: normalizeId(group.id),
+          groupName: normalizeGroupName(group.groupName ?? group.name),
+          addOnItems: (group.addOnItems ?? [])
+            .filter((item) => !item.outofstock)
+            .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
+        }));
+
+      return {
+        ...rawItem,
+        category: normalizeValue(rawItem?.category, 'uncategorized'),
+        menuType: normalizeValue(rawItem?.menuType, 'menu'),
+        addOnGroupAssignments: assignments,
+        addOnGroups,
+      } as MenuItem;
+      });
+  };
+
   const sortNumericKeys = (obj?: Record<string, unknown>) =>
     Object.keys(obj ?? {}).sort((a, b) => Number(a) - Number(b));
 
@@ -1404,11 +1587,7 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
         const rawItems = Array.isArray(data)
           ? data
           : data?.items ?? data?.documents ?? data?.data ?? [];
-        const items = rawItems.map((item: MenuItem) => ({
-          ...item,
-          category: normalizeValue(item.category, 'uncategorized'),
-          menuType: normalizeValue(item.menuType, 'menu'),
-        }));
+        const items = normalizeItemsWithAddOns(data, rawItems);
         setProducts(items);
         applyPreferences(mergedPreferences, items);
         const cacheKey = getMenuCacheKey(requestCompanyId);

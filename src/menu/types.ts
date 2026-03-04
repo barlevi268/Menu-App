@@ -64,6 +64,39 @@ export type MenuItemOption = {
   variant?: string | null;
 };
 
+export type MenuAddOnItem = {
+  id?: string;
+  $id?: string;
+  name?: string;
+  price?: number | string;
+  description?: string;
+  image?: string | null;
+  outofstock?: boolean;
+  sequence?: number;
+  addOnGroupId?: string | null;
+  add_on_group_id?: string | null;
+};
+
+export type MenuAddOnGroup = {
+  id?: string;
+  groupName?: string;
+  name?: string;
+  sequence?: number;
+  minSelect?: number;
+  maxSelect?: number;
+  required?: boolean;
+  addOnItems?: MenuAddOnItem[];
+  add_on_items?: MenuAddOnItem[];
+};
+
+export type MenuAddOnGroupAssignment = {
+  id?: string;
+  addOnGroupId?: string;
+  add_on_group_id?: string;
+  sequence?: number;
+  addOnGroup?: MenuAddOnGroup | null;
+};
+
 export type MenuItemRow = {
   price?: number | string;
   pricePerUnit?: number | string;
@@ -78,6 +111,16 @@ export type MenuItem = MenuItemRow & {
   image?: string | null;
   category?: string;
   menuType?: string;
+  addOnGroupAssignments?: MenuAddOnGroupAssignment[];
+  addOnGroups?: MenuAddOnGroup[];
+};
+
+export type OrderItemAddOn = {
+  groupId: string;
+  groupName: string;
+  itemId: string;
+  itemName: string;
+  price: number;
 };
 
 export type OrderItem = {
@@ -87,6 +130,7 @@ export type OrderItem = {
   image?: string | null;
   variant?: string | null;
   optionName?: string | null;
+  selectedAddOns?: OrderItemAddOn[];
   note?: string;
   quantity: number;
   unitPrice: number;
