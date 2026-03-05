@@ -6,6 +6,7 @@ import "./index.css";
 import FormFillApp from "./forms/FormFillApp";
 import MenuApp from "./menu/MenuApp";
 import ReservationApp from "./reservations/ReservationApp";
+import TabletPosApp from "./tablet-pos/TabletPosApp";
 
 function GlobalInputSpaceFix() {
   useEffect(() => {
@@ -44,6 +45,8 @@ function App() {
       <Route path="/reservations/:companyId" element={<ReservationApp />} />
       <Route path="/form" element={<FormFillApp />} />
       <Route path="/form/:id" element={<FormFillApp />} />
+      <Route path="/tablet-pos" element={<TabletPosApp />} />
+      <Route path="/tablet-pos/:companyId" element={<TabletPosApp />} />
       <Route path="*" element={<Navigate to="/menu" replace />} />
     </Routes>
   );

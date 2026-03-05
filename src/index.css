@@ -19,7 +19,7 @@
 
   .menu-sheet-md {
     @apply max-w-xl;
-  }`
+  }
 
   .menu-sheet-lg {
     @apply max-w-2xl;
