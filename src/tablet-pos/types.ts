@@ -1,13 +1,22 @@
 import React from "react";
 
 export type AppStage = "login" | "pos" | "payment" | "done";
-export type PaymentMethod = "cash" | "card" | "qrph" | "gcash";
+export type PaymentMethod = string;
+export type PaymentMethodKind = "cash" | "card" | "qrph" | "gcash" | "other";
 
 export type User = {
-  id: string;
+  id: string | number;
   username: string;
-  password: string;
-  name: string;
+  password?: string;
+  name?: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyId?: string | null;
+  company?: {
+    id: string;
+    name?: string | null;
+  } | null;
 };
 
 export type Category = {
@@ -93,7 +102,10 @@ export type ConfigModalState = {
 };
 
 export type CompletedPayment = {
-  method: PaymentMethod;
+  methodId: PaymentMethod;
+  methodLabel: string;
+  methodKind: PaymentMethodKind;
+  orderId: string;
   total: number;
   amountGiven: number;
   change: number;
@@ -103,5 +115,6 @@ export type PaymentMethodOption = {
   id: PaymentMethod;
   label: string;
   description: string;
+  kind: PaymentMethodKind;
   icon: React.ReactNode;
 };

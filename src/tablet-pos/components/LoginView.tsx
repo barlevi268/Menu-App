@@ -4,6 +4,7 @@ type LoginViewProps = {
   username: string;
   password: string;
   loginError: string;
+  isSubmitting: boolean;
   onUsernameChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -13,6 +14,7 @@ export default function LoginView({
   username,
   password,
   loginError,
+  isSubmitting,
   onUsernameChange,
   onPasswordChange,
   onSubmit,
@@ -22,7 +24,7 @@ export default function LoginView({
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
         <p className="text-xs font-medium uppercase tracking-[0.3em] text-slate-500">Tablet POS</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-900">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-600">Use mock credentials: `tablet` / `tablet123`.</p>
+        <p className="mt-2 text-sm text-slate-600">Use your account username/email and password.</p>
 
         <form className="mt-8 space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm font-medium text-slate-700">
@@ -56,9 +58,10 @@ export default function LoginView({
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-slate-800"
+            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSubmitting}
           >
-            Login
+            {isSubmitting ? "Signing In..." : "Login"}
           </button>
         </form>
       </div>

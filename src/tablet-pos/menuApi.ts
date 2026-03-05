@@ -261,9 +261,7 @@ const mapMenuResponseToCatalog = (data: unknown) => {
       id: productId,
       categoryId,
       name: productName,
-      image:
-        normalizeText(rawItem.image, "") ||
-        `https://picsum.photos/seed/menu-${productId}/200/200`,
+      image: normalizeText(rawItem.image, ""),
       price: basePrice,
       options,
       addOnGroups,
@@ -295,7 +293,7 @@ export const getCompanyIdFromPath = () => {
   const segments = window.location.pathname.split("/").filter(Boolean);
   if (paramId) return paramId;
   if (segments[0] === "o") return null;
-  if (segments[0] === "menu" || segments[0] === "order" || segments[0] === "tablet-pos") {
+  if (segments[0] === "menu" || segments[0] === "order" || segments[0] === "pos") {
     return segments[1] || null;
   }
   return segments[0] ?? null;

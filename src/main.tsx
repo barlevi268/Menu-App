@@ -45,8 +45,8 @@ function App() {
       <Route path="/reservations/:companyId" element={<ReservationApp />} />
       <Route path="/form" element={<FormFillApp />} />
       <Route path="/form/:id" element={<FormFillApp />} />
-      <Route path="/tablet-pos" element={<TabletPosApp />} />
-      <Route path="/tablet-pos/:companyId" element={<TabletPosApp />} />
+      <Route path="/pos" element={<TabletPosApp />} />
+      <Route path="/pos/:companyId" element={<TabletPosApp />} />
       <Route path="*" element={<Navigate to="/menu" replace />} />
     </Routes>
   );

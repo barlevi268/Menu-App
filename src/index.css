@@ -4,6 +4,64 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInFromLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideOutToRight {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+  }
+
+  .animate-in {
+    animation-duration: 300ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-in {
+    animation-name: fadeIn;
+  }
+
+  .slide-in-from-left-4 {
+    animation-name: slideInFromLeft;
+  }
+
+  .slide-out-to-right {
+    animation-name: slideOutToRight;
+  }
+
+  .duration-200 {
+    animation-duration: 200ms !important;
+  }
+
+  .duration-300 {
+    animation-duration: 300ms !important;
+  }
+}
+
 @layer components {
   .menu-overlay {
     @apply fixed inset-0 z-50 flex items-end justify-center;

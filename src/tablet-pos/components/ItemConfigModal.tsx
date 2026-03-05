@@ -1,5 +1,5 @@
 import React from "react";
-import { X } from "lucide-react";
+import { ImageOff, X } from "lucide-react";
 import type { ConfigDraft, ConfigModalState } from "../types";
 
 type ItemConfigModalProps = {
@@ -19,9 +19,26 @@ export default function ItemConfigModal({
   onUpdateDraft,
   peso,
 }: ItemConfigModalProps) {
+  const [isClosing, setIsClosing] = React.useState(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div 
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5 transition-opacity duration-200 ${
+        isClosing ? "opacity-0" : "opacity-100"
+      }`}
+    >
+      <div 
+        className={`max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl transition-all duration-300 ${
+          isClosing 
+            ? "scale-95 opacity-0 translate-y-4" 
+            : "scale-100 opacity-100 translate-y-0"
+        }`}
+      >
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Item Configuration</p>
@@ -29,7 +46,7 @@ export default function ItemConfigModal({
           </div>
           <button
             className="rounded-full border border-slate-300 p-2 text-slate-600"
-            onClick={onClose}
+            onClick={handleClose}
           >
             <X size={18} />
           </button>
@@ -37,11 +54,17 @@ export default function ItemConfigModal({
 
         <div className="max-h-[calc(92vh-6.5rem)] overflow-auto p-4">
           <div className="flex gap-4">
-            <img
-              src={configModal.product.image}
-              alt={configModal.product.name}
-              className="h-24 w-24 rounded-xl object-cover"
-            />
+            {configModal.product.image ? (
+              <img
+                src={configModal.product.image}
+                alt={configModal.product.name}
+                className="h-24 w-24 rounded-xl object-cover"
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <ImageOff size={28} />
+              </div>
+            )}
             <div>
               <p className="text-sm text-slate-600">Base Price</p>
               <p className="text-xl font-semibold text-slate-900">{peso(configModal.product.price)}</p>

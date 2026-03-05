@@ -1,9 +1,8 @@
 import React from "react";
-import type { CompletedPayment, PaymentMethodOption } from "../types";
+import type { CompletedPayment } from "../types";
 
 type DoneViewProps = {
   completedPayment: CompletedPayment | null;
-  paymentMethods: PaymentMethodOption[];
   doneCountdown: number;
   onStartNewTransaction: () => void;
   peso: (amount: number) => string;
@@ -11,7 +10,6 @@ type DoneViewProps = {
 
 export default function DoneView({
   completedPayment,
-  paymentMethods,
   doneCountdown,
   onStartNewTransaction,
   peso,
@@ -29,14 +27,14 @@ export default function DoneView({
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-600">Method</span>
               <span className="font-semibold text-slate-900">
-                {paymentMethods.find((method) => method.id === completedPayment?.method)?.label}
+                {completedPayment?.methodLabel ?? "-"}
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-sm">
               <span className="text-slate-600">Total Paid</span>
               <span className="font-semibold text-slate-900">{peso(completedPayment?.total ?? 0)}</span>
             </div>
-            {completedPayment?.method === "cash" && (
+            {completedPayment?.methodKind === "cash" && (
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-slate-600">Change</span>
                 <span className="font-semibold text-emerald-600">
