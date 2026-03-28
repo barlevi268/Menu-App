@@ -31,6 +31,12 @@ const logoImgSrc =
 const MENU_CACHE_VERSION = 1;
 const MENU_CACHE_PREFIX = 'menu-cache-v1';
 const MENU_IMAGE_CACHE = 'menu-images-v1';
+const ACTIVE_ORDER_STATUSES = new Set([
+  'received',
+  'accepted',
+  'processing',
+  'in delivery',
+]);
 const DEFAULT_DISPATCH_OPTIONS: DispatchOption[] = [
   { key: 'Pickup', label: 'Pickup', requiresAddress: false },
   { key: 'Delivery', label: 'Delivery', requiresAddress: true },
@@ -289,8 +295,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     [orderState.items]
   );
   const ongoingStatus = statusData?.status ?? null;
-  const hasOngoingOrder =
-    Boolean(orderId && ongoingStatus) && ongoingStatus !== 'draft' && ongoingStatus !== 'deleted';
+  const normalizedOngoingStatus = ongoingStatus?.trim().toLowerCase() ?? null;
+  const hasOngoingOrder = Boolean(
+    orderId && normalizedOngoingStatus && ACTIVE_ORDER_STATUSES.has(normalizedOngoingStatus)
+  );
   const statusLink = useMemo(() => {
     if (!orderId || typeof window === 'undefined') return null;
     const url = new URL(window.location.href);
@@ -983,9 +991,10 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
     async (existingId: string) => {
       const data = await fetchOrderStatus(existingId);
       const status = data?.status ?? null;
+      const normalizedStatus =
+        typeof status === 'string' ? status.trim().toLowerCase() : null;
       if (!status) return;
-      if (status === 'draft') return;
-      if (status === 'deleted') {
+      if (!normalizedStatus || !ACTIVE_ORDER_STATUSES.has(normalizedStatus)) {
         clearLocalOrderState();
         return;
       }
