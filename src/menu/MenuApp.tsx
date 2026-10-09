@@ -1945,37 +1945,39 @@ const MenuApp = ({ customerOrdersMode = false }: MenuAppProps) => {
       <div
         className={`${paperView ? 'bg-orange-50' : 'bg-gray-50'} dark:bg-gray-800 sticky top-0 z-10 shadow-sm `}
       >
-        <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
-          {categoryGroups.map((group) => {
-            const isGroupActive =
-              getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
-            return (
-              <div
-                key={group.id}
-                onClick={() => {
-                  if (group.type === 'gallery' && group.images) {
-                    setSelectedGallery({ name: group.name, images: group.images });
-                    setGalleryImageIndex(0);
-                  } else {
-                    const firstCategory = group.categories[0];
-                    setSelectedCategory(firstCategory);
-                    setSelectedGallery(null);
-                    categoryButtonRefs.current[firstCategory]?.scrollIntoView({
-                      behavior: 'smooth',
-                      inline: 'center',
-                      block: 'nearest',
-                    });
-                    scrollToCategoryHeader(firstCategory);
-                  }
-                }}
-                className={getGroupTabClasses(isGroupActive)}
-                style={getGroupTabStyle(isGroupActive)}
-              >
-                {group.name}
-              </div>
-            );
-          })}
-        </div>
+        {categoryGroups.length > 1 && (
+          <div className="flex flex-nowrap max-w-4xl mx-auto overflow-x-auto text-gray-600 dark:text-gray-300 space-x-3 text-xs uppercase px-4 pt-3 pb-1 font-semibold tracking-wide scrollbar-hide">
+            {categoryGroups.map((group) => {
+              const isGroupActive =
+                getGroupFromCategory(selectedCategory) === group.name || selectedGallery?.name === group.name;
+              return (
+                <div
+                  key={group.id}
+                  onClick={() => {
+                    if (group.type === 'gallery' && group.images) {
+                      setSelectedGallery({ name: group.name, images: group.images });
+                      setGalleryImageIndex(0);
+                    } else {
+                      const firstCategory = group.categories[0];
+                      setSelectedCategory(firstCategory);
+                      setSelectedGallery(null);
+                      categoryButtonRefs.current[firstCategory]?.scrollIntoView({
+                        behavior: 'smooth',
+                        inline: 'center',
+                        block: 'nearest',
+                      });
+                      scrollToCategoryHeader(firstCategory);
+                    }
+                  }}
+                  className={getGroupTabClasses(isGroupActive)}
+                  style={getGroupTabStyle(isGroupActive)}
+                >
+                  {group.name}
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div
           className={`flex max-w-4xl mx-auto overflow-x-auto  space-x-3 scrollbar-hide ${
             paperView ? 'px-4 pt-3' : 'p-4'

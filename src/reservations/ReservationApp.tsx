@@ -374,7 +374,7 @@ export default function ReservationApp() {
                         size="lg"
                         selectedKeys={date ? new Set([date]) : new Set()}
                         onSelectionChange={(keys) => {
-                          const next = keys === "all" ? "" : Array.from(keys)[0] || "";
+                          const next = keys === "all" ? "" : String(Array.from(keys)[0] || "");
                           if (next) setDate(next);
                         }}
                       >
@@ -394,7 +394,7 @@ export default function ReservationApp() {
                         size="lg"
                         selectedKeys={new Set([String(pax)])}
                         onSelectionChange={(keys) => {
-                          const next = keys === "all" ? "" : Array.from(keys)[0] || "";
+                          const next = keys === "all" ? "" : String(Array.from(keys)[0] || "");
                           const parsed = Number(next);
                           if (!Number.isNaN(parsed)) setPax(parsed);
                         }}

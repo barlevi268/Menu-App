@@ -6,6 +6,9 @@ import "./index.css";
 import FormFillApp from "./forms/FormFillApp";
 import MenuApp from "./menu/MenuApp";
 import ReservationApp from "./reservations/ReservationApp";
+import TableMapApp from "./reservations/TableMapApp";
+import FloorplanApp from "./reservations/FloorplanApp";
+import TableReservationCustomerApp from "./reservations/TableReservationCustomerApp";
 import TabletPosApp from "./tablet-pos/TabletPosApp";
 
 function GlobalInputSpaceFix() {
@@ -42,7 +45,14 @@ function App() {
       {/* Backup Route since some links use it */}
       <Route path="/" element={<MenuApp />} />
       <Route path="/reservations" element={<ReservationApp />} />
+      <Route path="/reservations/confirmation/:slotId" element={<TableReservationCustomerApp />} />
       <Route path="/reservations/:companyId" element={<ReservationApp />} />
+      <Route path="/reservation-by-table" element={<TableMapApp />} />
+      <Route path="/floorplan" element={<FloorplanApp />} />
+      <Route path="/table-reservation" element={<TableReservationCustomerApp />} />
+      <Route path="/table-reservation/:companyId" element={<TableReservationCustomerApp />} />
+      <Route path="/reserve-table" element={<TableReservationCustomerApp />} />
+      <Route path="/reserve-table/:companyId" element={<TableReservationCustomerApp />} />
       <Route path="/form" element={<FormFillApp />} />
       <Route path="/form/:id" element={<FormFillApp />} />
       <Route path="/pos" element={<TabletPosApp />} />
